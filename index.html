@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0f0e">
+  <title>Animal Draft War</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='37' cy='37' r='24' fill='%23e8336f'/%3E%3Ccircle cx='30' cy='30' r='24' fill='%232340c8'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Schibsted+Grotesk:wght@400;600;700;800&display=swap">
+  <link rel="stylesheet" href="styles/style.css">
+</head>
+<body>
+  <!-- Ink filters: recolour the black animal silhouettes into the game's printing inks. -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <filter id="ink-ink" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0 0 0 0 .086  0 0 0 0 .086  0 0 0 0 .227  0 0 0 1 0"/></filter>
+    <filter id="ink-blue" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0 0 0 0 .137  0 0 0 0 .251  0 0 0 0 .784  0 0 0 1 0"/></filter>
+    <filter id="ink-pink" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0 0 0 0 .91  0 0 0 0 .2  0 0 0 0 .435  0 0 0 1 0"/></filter>
+    <filter id="ink-teal" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0 0 0 0 .059  0 0 0 0 .549  0 0 0 0 .502  0 0 0 1 0"/></filter>
+  </svg>
+  <header id="topbar"></header>
+  <div id="banner" hidden></div>
+  <main id="app"><p class="muted center">Loading…</p></main>
+  <aside id="chat" hidden>
+    <button id="chathead" type="button">Chat</button>
+    <div id="chatbody">
+      <div id="chatlist"></div>
+      <form id="chatform" autocomplete="off">
+        <input id="chatin" maxlength="200" placeholder="Say something…" aria-label="Chat message">
+        <button class="btn primary" type="submit">Send</button>
+      </form>
+    </div>
+  </aside>
+  <div id="toast" role="status"></div>
+  <noscript>This game needs JavaScript.</noscript>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
