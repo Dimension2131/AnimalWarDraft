@@ -4,7 +4,7 @@
 // =====================================================================
 
 // ===== BATCH FILES (EDIT HERE) =====
-const BATCH_FILES = ["/animals/animals_seed.js", "/animals/animals_aerial.js", "/animals/animals_big_land_carnivores.js", "/animals/animals_herbivores.js", "/animals/animals_herps.js", "/animals/animals_invertebrates.js", "/animals/animals_marine.js"];
+const BATCH_FILES = ["../animals/animals_seed.js", "../animals/animals_aerial.js", "../animals/animals_big_land_carnivores.js", "../animals/animals_herbivores.js", "../animals/animals_herps.js", "../animals/animals_invertebrates.js", "../animals/animals_marine.js"];
 // ===== END BATCH FILES =====
 
 async function loadAll() {
