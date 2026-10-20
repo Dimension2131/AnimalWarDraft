@@ -419,3 +419,27 @@ textarea{min-height:96px;resize:vertical;line-height:1.4}
   .fightgrid .arena{margin-left:0}
   .fightgrid .stage-ctl{justify-content:flex-start}
 }
+
+/* ---- pack / mode foundation (Task 2) ---- */
+.has-tip{cursor:help;text-decoration:underline dotted var(--edge-dim);text-underline-offset:3px}
+.tippop{position:fixed;z-index:60;max-width:min(320px,calc(100vw - 16px));padding:9px 11px;background:var(--sheet2);color:var(--text);border:2px solid var(--yellow);border-radius:6px;box-shadow:3px 3px 0 var(--pink);font-size:.82rem;line-height:1.35;font-weight:600;text-transform:none;letter-spacing:0}
+.sstrip{display:flex;flex-wrap:wrap;gap:3px 8px;font-size:.66rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em}
+.sstrip .sp{display:inline-flex;gap:3px;align-items:baseline}
+.sstrip .sp i{font-style:normal;color:var(--muted)}
+.sstrip .sp b{font:.8rem var(--display);letter-spacing:0;color:var(--c)}
+.lrow .sstrip{flex:1 1 100%;margin-left:36px}
+.lrow{flex-wrap:wrap}
+.teams-card .team{margin-bottom:8px}
+.teams-card .tname{font-weight:800;margin-bottom:3px}
+.teams-card .trow{display:flex;flex-wrap:wrap;gap:2px 10px;align-items:center;padding:3px 0;border-top:1px solid var(--rule)}
+#topbar .brand{font:.95rem var(--display);color:var(--text);letter-spacing:.02em;margin-right:4px}
+@media(max-width:520px){#topbar .brand{display:none}}
+
+/* ---- Task 3: toughness + traits ---- */
+.s-toughness{--c:#c48bff}
+.acard .traitrow{min-height:26px;gap:4px;margin-top:4px}
+.pill.trait{margin-left:0;font-size:.74rem;white-space:nowrap}
+.pill.trait-up{background:rgba(51,214,192,.14);border-color:var(--teal);color:var(--teal)}
+.pill.trait-down{background:rgba(255,92,149,.14);border-color:var(--pink);color:#ff8fb5}
+.sstrip .pill.trait{font-size:.62rem;padding:0 6px;line-height:1.4;text-transform:none;letter-spacing:0}
+.stat.s-toughness>span{white-space:nowrap;letter-spacing:.02em;font-size:.9em}

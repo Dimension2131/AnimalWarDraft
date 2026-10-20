@@ -3,7 +3,8 @@
 //
 // DATABASE LAYOUT
 // rooms/{CODE}/                       CODE = 4 letters
-//   meta/            { createdAt, hostKey, settings:{...}, phase }       phase: lobby|draft|lineup|tournament|results
+//   meta/            { createdAt, hostKey, pack, mode, settings:{...}, phase }   pack: category pack id (default "animals"), mode: game mode id (default "classic")
+//                    phase: one of the active mode's `phases` (classic: lobby|draft|lineup|tournament|results)
 //   meta/settings/   { startBalance, rosterSize, auctionSeconds, spectatorVoting, judgeMode, appealOutcome, filters:{...} }
 //   host/            { key, sid, hb }              heartbeat written every 3 s; claimed by transaction when stale > 10 s
 //   conns/{sid}/     { key, role, t }              role: player|spectator; removed onDisconnect; max 10
@@ -69,12 +70,12 @@ const LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 export const makeCode = () => Array.from({ length: 4 }, () => LETTERS[Math.floor(Math.random() * LETTERS.length)]).join("");
 export const normCode = (c) => String(c || "").toUpperCase().replace(/[^A-Z]/g, "").slice(0, 4);
 
-export async function createRoom(name, settings) {
+export async function createRoom(name, settings, extra = {}) {
   const key = nameKey(name);
   for (let i = 0; i < 12; i++) {
     const code = makeCode();
     const res = await runTransaction(rp(code, "meta"), (cur) => (cur ? undefined : {
-      createdAt: serverTimestamp(), hostKey: key, phase: "lobby", settings }), { applyLocally: false });
+      createdAt: serverTimestamp(), hostKey: key, phase: "lobby", pack: extra.pack || "animals", mode: extra.mode || "classic", settings }), { applyLocally: false });
     if (res.committed) return code;
   }
   throw new Error("Could not allocate a room code, try again");

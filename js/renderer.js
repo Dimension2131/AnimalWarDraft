@@ -170,7 +170,7 @@ function blob(c, x, y, r, seed, spikes) {
 export function createRenderer(canvas, cb = {}) {
   const ctx = canvas.getContext("2d");
   let W = 360, H = 420, dpr = 1, units = {}, evs = [], idx = 0, pos = 0, playing = true, speed = 1, last = 0, raf = 0;
-  let banner = "", tickNo = 0, ended = false, endFired = false, arena = "plains", floaters = [], fx = [], parts = [], teams = null, time = 0, rad = 24;
+  let banner = "", tickNo = 0, ended = false, endFired = false, arena = "plains", arenaMeta = {}, floaters = [], fx = [], parts = [], teams = null, time = 0, rad = 24;
   let bgCanvas = null, bgKey = "";
 
   if (document.fonts && document.fonts.load) {
@@ -233,6 +233,7 @@ export function createRenderer(canvas, cb = {}) {
       case "arena_effect": if (e.actor && !instant && u) floater(u, `${e.value > 0 ? "+" : ""}${e.value}% terrain`, e.value > 0 ? "#b6f08a" : "#ffb98f"); break;
       case "status":
         if (e.sub === "venom" && t) t.venomTick = e.tick + R.VENOM_WINDOW;
+        if (e.sub === "regen" && t) { t.hp = Math.min(t.maxHp, t.hp + e.value); if (!instant) floater(t, `+${e.value}`, "#9be37a"); }
         if ((e.sub === "herd" || e.sub === "venom_tick") && t) {
           t.hp = Math.max(0, t.hp - e.value);
           if (!instant) { t.flash = 0.6; floater(t, `-${e.value}`, e.sub === "venom_tick" ? "#9be37a" : "#9fb4ff"); }
@@ -246,7 +247,7 @@ export function createRenderer(canvas, cb = {}) {
 
   // ---- drawing ----
   function paintBg() {
-    const art = ART[arena] || ART.plains, info = R.ARENA_INFO[arena] || R.ARENA_INFO.plains;
+    const am = arenaMeta[arena] || {}, art = ART[am.art || arena] || ART.plains, info = { label: am.label || arena };
     if (!bgCanvas) bgCanvas = document.createElement("canvas");
     bgCanvas.width = Math.round(W * dpr); bgCanvas.height = Math.round(H * dpr);
     const c = bgCanvas.getContext("2d"); c.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -268,18 +269,19 @@ export function createRenderer(canvas, cb = {}) {
     const key = `${arena}|${W}|${H}|${dpr}`;
     if (bgKey !== key) { paintBg(); bgKey = key; }
     ctx.drawImage(bgCanvas, 0, 0, W, H);
-    const art = ART[arena] || ART.plains;
+    const art = ART[(arenaMeta[arena] || {}).art || arena] || ART.plains;
     ctx.fillStyle = art.fleck; ctx.globalAlpha = 0.5;
     for (const p of parts) ctx.fillRect(p.x, p.y, p.s, p.s);
     ctx.globalAlpha = 1;
   }
   function stepParts(dt) {
     if (reduceMotion) return;
+    const ak = (arenaMeta[arena] || {}).art || arena;
     for (const p of parts) {
-      if (arena === "water") { p.y -= p.v * dt * 0.05; p.x += Math.sin((time + p.x) / 400) * 0.2; if (p.y < -5) { p.y = H + 5; p.x = Math.random() * W; } }
-      else if (arena === "desert") { p.x += p.v * dt * 0.12; if (p.x > W + 5) { p.x = -5; p.y = Math.random() * H; } }
-      else if (arena === "forest") { p.y += p.v * dt * 0.04; p.x += Math.sin((time + p.y) / 500) * 0.4; if (p.y > H + 5) { p.y = -5; p.x = Math.random() * W; } }
-      else if (arena === "mountain") { p.y += p.v * dt * 0.05; p.x -= p.v * dt * 0.02; if (p.y > H + 5) { p.y = -5; p.x = Math.random() * W; } }
+      if (ak === "water") { p.y -= p.v * dt * 0.05; p.x += Math.sin((time + p.x) / 400) * 0.2; if (p.y < -5) { p.y = H + 5; p.x = Math.random() * W; } }
+      else if (ak === "desert") { p.x += p.v * dt * 0.12; if (p.x > W + 5) { p.x = -5; p.y = Math.random() * H; } }
+      else if (ak === "forest") { p.y += p.v * dt * 0.04; p.x += Math.sin((time + p.y) / 500) * 0.4; if (p.y > H + 5) { p.y = -5; p.x = Math.random() * W; } }
+      else if (ak === "mountain") { p.y += p.v * dt * 0.05; p.x -= p.v * dt * 0.02; if (p.y > H + 5) { p.y = -5; p.x = Math.random() * W; } }
       else { p.x += p.v * dt * 0.05; p.y += Math.sin((time + p.x) / 700) * 0.2; if (p.x > W + 5) { p.x = -5; p.y = Math.random() * H; } }
     }
   }
@@ -392,7 +394,7 @@ export function createRenderer(canvas, cb = {}) {
   return {
     // fight: {teamA, teamB, arena, events}; startPos = ms already elapsed (negative = countdown)
     load(fight, startPos = 0) {
-      teams = { A: fight.teamA, B: fight.teamB }; arena = fight.arena; evs = fight.events; pos = startPos; playing = true; ended = false; bgKey = "";
+      teams = { A: fight.teamA, B: fight.teamB }; arena = fight.arena; arenaMeta = fight.arenas || {}; evs = fight.events; pos = startPos; playing = true; ended = false; bgKey = "";
       resize(); initParts(); build();
     },
     play() { playing = true; }, pause() { playing = false; }, toggle() { playing = !playing; return playing; },
