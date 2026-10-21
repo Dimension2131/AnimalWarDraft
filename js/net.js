@@ -1,4 +1,5 @@
 import * as R from "./rules.js";
+import { publicRoomState } from "./util.js";
 
 const V = R.FIREBASE_VERSION;
 const [appMod, dbMod] = await Promise.all([
@@ -49,10 +50,37 @@ export async function createRoom(name, settings, extra = {}) {
   for (let i = 0; i < 12; i++) {
     const code = makeCode();
     const res = await runTransaction(rp(code, "meta"), (cur) => (cur ? undefined : {
-      createdAt: serverTimestamp(), hostKey: key, phase: "lobby", pack: extra.pack || "animals", mode: extra.mode || "classic", settings }), { applyLocally: false });
+      createdAt: serverTimestamp(), hostKey: key, phase: "lobby", pack: extra.pack || "animals", mode: extra.mode || "classic", visibility: extra.visibility === "public" ? "public" : "private", settings }), { applyLocally: false });
     if (res.committed) return code;
   }
   throw new Error("Could not allocate a room code, try again");
+}
+
+// ---------- public lobby index ----------
+// `publicRooms/<CODE>` is only a SIGNPOST: { host, players, pack, mode, t }. It is never trusted: readers re-check the real room (see verifiedPublicRooms),
+// so a stale or forged entry can never show a room that is not an open public lobby. Needs the `publicRooms` database rule (read + write).
+export const PUBLIC_TTL_MS = 60000;
+const pubRef = (code) => ref(db, `publicRooms/${code}`);
+export async function listRoom(code, entry) {
+  await set(pubRef(code), { ...entry, t: serverTimestamp() });
+  onDisconnect(pubRef(code)).remove();   // host closes the tab -> the listing disappears by itself
+}
+export async function unlistRoom(code) {
+  try { await onDisconnect(pubRef(code)).cancel(); } catch (e) { /* ignore */ }
+  try { await remove(pubRef(code)); } catch (e) { console.warn("unlist", e); }
+}
+export function watchPublicRooms(cb) { return onValue(ref(db, "publicRooms"), (s) => cb(s.val() || {}), (e) => { console.warn("public rooms", e); cb({}); }); }
+// Returns [{ code, host, players, pack, mode }] for rooms that are REALLY an open public lobby right now. Entries that are provably dead are deleted (self-healing).
+export async function verifiedPublicRooms(index) {
+  const out = [];
+  await Promise.all(Object.entries(index || {}).map(async ([code, e]) => {
+    let meta = null;
+    try { meta = await getVal(code, "meta"); } catch (err) { return; }
+    const st = publicRoomState(meta, e, now(), PUBLIC_TTL_MS);
+    if (st === "dead") { remove(pubRef(code)).catch(() => {}); return; }   // started, finished, deleted or not public: never shows again
+    if (st === "show") out.push({ code, host: e.host || "?", players: e.players || 0, pack: e.pack, mode: e.mode });
+  }));
+  return out.sort((a, b) => a.code.localeCompare(b.code));
 }
 
 export async function joinRoom(code, name, wantRole) {

@@ -68,7 +68,7 @@ export function startHost({ code, key, animals, pack, mode, onLog = () => {} }) 
     const balances = {}; players.forEach((k) => { balances[k] = s.startBalance; });
     await N.patch(code, "", {
       game: { pool: ids, poolSeed, keys: players }, ledger: { balances, drawIndex: 0, stall: 0 },
-      auction: null, lineups: null, tour: null, appeals: null, "meta/phase": nextPhase(mode, "lobby") || "draft"
+      auction: null, lineups: null, tour: null, appeals: null, "meta/started": true, "meta/phase": nextPhase(mode, "lobby") || "draft"
     });
     log("game started", ids.length, pack.nouns.plural, "in pool");
   }

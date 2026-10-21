@@ -100,7 +100,21 @@ async function main() {
     unsubs.push(N.watchChat(code, (c) => { S.chat = c; chatUpdate(); }));
   }
   function stopWatching() { unsubs.forEach((u) => { try { u(); } catch (e) { /* ignore */ } }); unsubs = []; S.loaded = {}; for (const p of PATHS) S[p] = undefined; }
-  function schedule() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; route(); if (current && current.update) current.update(); topbar(); ensureRunner(); }); }
+  // ---- public lobby listing (host device only): list while phase=lobby, unlist the moment the game starts or the room is private ----
+  let listedSig = "", listedCode = "", listTimer = 0;
+  function unlistNow() { if (listedCode) { N.unlistRoom(listedCode); listedCode = ""; } listedSig = ""; if (listTimer) { clearInterval(listTimer); listTimer = 0; } }
+  function syncListing(force) {
+    const m = S.meta, want = !!(S.code && isHost() && m && m.visibility === "public" && m.phase === "lobby" && !m.started);
+    if (!want) return unlistNow();   // game started / private / not host / left: remove the signpost (also if the heartbeat fires late)
+    const entry = { host: S.name || nameOf(S.key), players: Object.keys(S.players || {}).length, pack: m.pack || "animals", mode: m.mode || "classic" };
+    const sig = S.code + JSON.stringify(entry);
+    if (force || sig !== listedSig) {
+      listedSig = sig; listedCode = S.code;
+      N.listRoom(S.code, entry).catch(() => { listedSig = ""; });
+    }
+    if (!listTimer) listTimer = setInterval(() => syncListing(true), 20000);   // heartbeat: readers ignore signposts older than N.PUBLIC_TTL_MS
+  }
+  function schedule() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; route(); if (current && current.update) current.update(); topbar(); ensureRunner(); syncListing(); }); }
 
   async function enter(code, role, name) {
     const r = await N.joinRoom(code, name, role);
@@ -110,6 +124,7 @@ async function main() {
     if (r.role !== role) toast("The game is already running, so you joined as a spectator.");
   }
   async function leave() {
+    unlistNow();
     if (runner) { runner.stop(); runner = null; }
     if (S.code) await N.leaveRoom(S.code, S.role, S.key);
     stopWatching(); sessionStorage.removeItem("adw_room"); ctxKey = "";
@@ -224,16 +239,30 @@ async function main() {
     const codeIn = h("input", { placeholder: "CODE", maxlength: 4, class: "code-in", autocapitalize: "characters" });
     const need = () => { const n = N.cleanName(nameIn.value); if (!n) { toast("Enter a name first"); throw new Error("no name"); } N.saveName(n); return n; };
     const go = (fn) => async () => { try { await fn(); } catch (e) { if (e.message !== "no name") toast(e.message); } };
+    // public lobbies: the index is a signpost, every entry is re-verified against the real room (N.verifiedPublicRooms) before it is shown
+    let alive = true, pubIdx = {}, pubUnsub = null, pubTimer = 0;
+    const pubList = h("div", { class: "pub-list" }, h("p", { class: "muted small" }, "Looking for public lobbies…"));
+    const pubCard = h("div", { class: "card" }, h("label", {}, "Public lobbies"), pubList);
+    const renderPub = async () => {
+      let rooms = []; try { rooms = await N.verifiedPublicRooms(pubIdx); } catch (e) { /* keep empty */ }
+      if (!alive) return;
+      pubList.replaceChildren(...(rooms.length ? rooms.map((r) => h("div", { class: "row between pub-row" },
+        h("span", {}, h("b", {}, `${r.host}'s room`), h("span", { class: "muted small" }, `  ${r.code} · ${r.players}/${R.MAX_PLAYERS} players${PACKS.length > 1 ? " · " + ((PACKS.find((p) => p.id === r.pack) || {}).name || r.pack) : ""}`)),
+        r.players >= R.MAX_PLAYERS ? h("span", { class: "muted small" }, "Full") : h("button", { class: "btn primary", onclick: go(async () => { await enter(r.code, "player", need()); }) }, "Join"))) : [h("p", { class: "muted small" }, "No public lobbies right now. Create one, or join a private room with its code.")]));
+    };
+    if (N.configured) { pubUnsub = N.watchPublicRooms((idx) => { pubIdx = idx; renderPub(); }); pubTimer = setInterval(renderPub, 15000); }
     let heroEl = hero(PK, ENT.list);
+    const visSel = h("select", { title: "Private rooms need the code. Public rooms are listed on this page while they are still in the lobby." }, h("option", { value: "private" }, "Private (code only)"), h("option", { value: "public" }, "Public (listed)"));
     const packSel = h("select", { onchange: async (e) => { homePack = e.target.value; const d = await loadPackData(homePack); P.applyPack(d.pack); PK = d.pack; ENT = { list: d.list, map: d.map }; warm(d.list); const n = hero(d.pack, d.list); heroEl.replaceWith(n); heroEl = n; } }, PACKS.map((p) => h("option", { value: p.id, selected: p.id === homePack }, p.name)));
     screen(heroEl,
       h("div", { class: "card" }, h("label", {}, "Name"), nameIn, h("p", { class: "muted small" }, "The same name on another device takes over your seat.")),
-      h("div", { class: "card" }, PACKS.length > 1 ? [h("label", {}, "Category", packSel)] : null, h("button", { class: "btn primary big", onclick: go(async () => { const n = need(); const pk = await P.getPack(homePack), md = MODES[0]; const code = await N.createRoom(n, JSON.parse(JSON.stringify({ ...R.DEFAULT_SETTINGS, ...(md.defaultSettings || {}), filters: P.defaultFilters(pk) })), { pack: pk.id, mode: md.id }); await enter(code, "player", n); }) }, "Create room")),
+      h("div", { class: "card" }, PACKS.length > 1 ? [h("label", {}, "Category", packSel)] : null, h("label", {}, "Visibility", visSel), h("button", { class: "btn primary big", onclick: go(async () => { const n = need(); const pk = await P.getPack(homePack), md = MODES[0]; const code = await N.createRoom(n, JSON.parse(JSON.stringify({ ...R.DEFAULT_SETTINGS, ...(md.defaultSettings || {}), filters: P.defaultFilters(pk) })), { pack: pk.id, mode: md.id, visibility: visSel.value }); await enter(code, "player", n); }) }, "Create room")),
       h("div", { class: "card" }, h("label", {}, "Room code"), codeIn, h("div", { class: "row" },
         h("button", { class: "btn primary big", onclick: go(async () => { const n = need(), c = N.normCode(codeIn.value); if (c.length !== 4) throw new Error("Enter the 4-letter code"); await enter(c, "player", n); }) }, "Join"),
         h("button", { class: "btn big", onclick: go(async () => { const n = need(), c = N.normCode(codeIn.value); if (c.length !== 4) throw new Error("Enter the 4-letter code"); await enter(c, "spectator", n); }) }, "Spectate"))),
+      pubCard,
       h("button", { class: "btn", onclick: () => { S.view = "leaderboard"; schedule(); } }, "Leaderboard"));
-    return { update() { } };
+    return { update() { }, destroy() { alive = false; clearInterval(pubTimer); if (pubUnsub) pubUnsub(); } };
   };
 
   // ================= LEADERBOARD =================
