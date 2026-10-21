@@ -1,18 +1,13 @@
-// =====================================================================
-// modes/quiz/logic.js — pure logic of the Silhouette Quiz: settings, scoring, plan building, grading, reveal/final payloads.
-// No DOM, no Firebase, no Date.now(): deterministic given (pack, entities, facts, settings, keys, seed). Safe to import from Node tests.
-// The HOST builds the plan and grades; clients only render what the host wrote (see docs/QUIZ_MODE.md).
-// =====================================================================
 import { mulberry32 } from "../../js/sim.js";
 import { arr, hash } from "../../js/util.js";
 import { filterPool } from "../../js/pack.js";
 
 // ---------- constants ----------
-export const POINTS = { kind: 200, species: 400 };   // identification points; numeric questions are worth up to 1000 each
-export const IDENT_MS = 5000;                         // how long the "it was a ..." card shows
-export const REVEAL_MS = 14000;                       // how long a results card shows (host can skip)
-export const LEAD_MS = 2000;                          // extra time on the very first question
-export const GRACE_MS = 1200;                         // answers stamped up to this long after the deadline are still accepted (network latency)
+export const POINTS = { kind: 200, species: 400 };
+export const IDENT_MS = 5000;
+export const REVEAL_MS = 14000;
+export const LEAD_MS = 2000;
+export const GRACE_MS = 1200;
 export const DEFAULTS = { quizAnimals: 8, quizSeconds: 20, quizNumeric: 3, quizSpecies: true, quizReveal: "each", quizPenalty: 100, quizLowConf: false };
 
 const clamp = (v, lo, hi, d) => { v = Math.floor(+v); return Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : d; };
@@ -29,15 +24,11 @@ export function normalizeSettings(s) {
   };
 }
 
-// Firebase rejects `undefined` anywhere in a value: round-trip through JSON before every write.
 export const clean = (v) => JSON.parse(JSON.stringify(v));
-// Index-like database keys get a letter prefix so Firebase never turns a map into an array ("s3" = step 3, "a2" = animal 2).
 export const sk = (i) => "s" + i;
 export const ak = (a) => "a" + a;
 
-// ---------- scoring (the user's specification) ----------
-// Inside the published range [lo, hi] -> 1000. Otherwise 1000 * max(0, 1 - |log10(guess / actual)|): a factor of 2 off is 699, a factor of 10 off is 0.
-// Missing, non-numeric, zero or negative guesses score 0.
+
 export function scoreNumeric(guess, actual, lo, hi) {
   if (typeof guess !== "number" || !Number.isFinite(guess) || guess <= 0) return 0;
   if (typeof actual !== "number" || !Number.isFinite(actual) || actual <= 0) return 0;
@@ -45,7 +36,6 @@ export function scoreNumeric(guess, actual, lo, hi) {
   return Math.round(1000 * Math.max(0, 1 - Math.abs(Math.log10(guess / actual))));
 }
 
-// ---------- formatting helpers (used by the screens) ----------
 export function fmtNum(v) {
   if (typeof v !== "number" || !Number.isFinite(v)) return "?";
   const a = Math.abs(v);
@@ -53,7 +43,7 @@ export function fmtNum(v) {
   if (a >= 100) return String(Math.round(v));
   return String(+v.toPrecision(3));
 }
-// "how far off" text for one answer
+
 export function offBy(v, actual, lo, hi) {
   if (typeof v !== "number" || !Number.isFinite(v) || v <= 0) return "no valid answer";
   if (typeof lo === "number" && typeof hi === "number" && v >= lo && v <= hi) return "inside the published range";
@@ -64,15 +54,13 @@ export function offBy(v, actual, lo, hi) {
 export const article = (name) => (/^[aeiou]/i.test(String(name || "")) ? "an" : "a");
 const fill = (tpl, vars) => String(tpl).replace(/\{(\w+)\}/g, (m, k) => (k in vars ? vars[k] : m));
 
-// ---------- truth (host side: where the right answers come from) ----------
-// facts: the pack's facts object (keyed by entity id) or null when the file is missing.
 export function kindOfEntity(pack, facts, e) {
   const f = facts && facts[e.id];
   if (f && typeof f.kind === "string" && f.kind) return f.kind;
   const fb = pack.quiz && pack.quiz.kindFallbackField;
   return fb && typeof e[fb] === "string" && e[fb] ? e[fb] : null;
 }
-// -> { v, lo?, hi?, src, note, conf, medium } or null. `lowOk` lets low-confidence facts through (off by default).
+
 export function factFor(def, e, facts, lowOk) {
   if (def.source === "entity") {
     const v = e[def.key];
@@ -92,11 +80,9 @@ export function makeTruth(pack, map, facts) {
   };
 }
 
-// ---------- plan ----------
 const shuffle = (list, rng) => { const a = list.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const uniq = (l) => [...new Set(l)];
 
-// Builds the whole game up front. Returns a JSON-safe object (see docs/QUIZ_MODE.md for the shape). Throws a readable Error when it cannot.
 export function buildPlan({ pack, entities, facts, settings, keys, seed, gid }) {
   const Q = pack.quiz;
   if (!Q) throw new Error("This category does not support the Silhouette Quiz.");
@@ -112,13 +98,11 @@ export function buildPlan({ pack, entities, facts, settings, keys, seed, gid }) 
 
   const animals = picked.map((id) => {
     const e = map.get(id), kind = kindOf(e), r = rngFor(id, "k");
-    // kind question: the right kind plus 3 other kinds ("other" is never offered)
     let kq = null;
     if (kind && !skipKinds.has(kind)) {
       const others = shuffle(allKinds.filter((k) => k !== kind), r).slice(0, 3);
       if (others.length >= 1) kq = { options: shuffle([kind, ...others], r) };
     }
-    // species question: look-alikes first, then same kind, then same group (class)
     let sq = null;
     if (s.species) {
       const la = uniq(arr(facts && facts[id] && facts[id].look_alikes)).filter((x) => x !== id && map.has(x));
@@ -128,14 +112,13 @@ export function buildPlan({ pack, entities, facts, settings, keys, seed, gid }) 
       for (const list of [la, shuffle(sameKind, r), shuffle(sameGroup, r)]) for (const x of list) { if (d.length < 3 && !d.includes(x)) d.push(x); }
       if (d.length >= 1) sq = { options: shuffle([id, ...d], r) };
     }
-    // numeric questions: only facts that exist and pass the confidence filter; random pick up to the requested count
     const avail = [];
     for (const def of Q.numeric || []) {
       const f = factFor(def, e, facts, s.lowConf); if (!f) continue;
       avail.push({
         key: def.key, label: def.label, unit: def.unit, min: def.min, max: def.max,
         prompt: fill(def.prompt, { a: article(e.name), name: e.name, medium: f.medium || def.medium || "move" }),
-        note: f.note || def.hint || ""
+        note: def.hint || ""
       });
     }
     const num = shuffle(avail, rngFor(id, "n")).slice(0, s.numeric);
@@ -159,8 +142,6 @@ export function buildPlan({ pack, entities, facts, settings, keys, seed, gid }) 
     animals, steps
   });
 }
-
-// Firebase drops empty arrays/objects and may turn dense maps into arrays: put a plan read from the database back into one shape.
 export function normPlan(p) {
   if (!p) return null;
   return {
@@ -171,9 +152,6 @@ export function normPlan(p) {
 export const isQuestion = (st) => !!st && (st.t === "kind" || st.t === "species" || st.t === "num");
 export const stepMs = (P, st, first) => (isQuestion(st) ? P.settings.secs * 1000 + (first ? LEAD_MS : 0) : st.t === "ident" ? IDENT_MS : REVEAL_MS);
 
-// ---------- grading ----------
-// row: { [playerKey]: answerDoc|undefined } for ONE question step. answerDoc = { g: gameId, t: clientServerTime, v?: value, done?: true }.
-// Returns { [playerKey]: { v?, p } } where p = points (species wrong answers can be negative).
 export function gradeStep(P, i, row, truth, { gid, cutoff } = {}) {
   const st = P.steps[i], an = P.animals[st.a], out = {};
   for (const k of P.keys) {
@@ -195,7 +173,6 @@ export function gradeStep(P, i, row, truth, { gid, cutoff } = {}) {
 }
 
 const sc = (scores, i) => (scores && scores[sk(i)] && scores[sk(i)].r) || {};
-// per-animal gain for each player from the frozen score docs
 export function animalGains(P, scores, a) {
   const g = Object.fromEntries(P.keys.map((k) => [k, 0]));
   P.steps.forEach((st, i) => { if (st.a === a && isQuestion(st)) { const r = sc(scores, i); for (const k of P.keys) g[k] += (r[k] && r[k].p) || 0; } });
@@ -208,7 +185,6 @@ export function totalsThrough(P, scores, lastAnimal) {
 }
 export const rankKeys = (P, totals) => P.keys.slice().sort((x, y) => (totals[y] - totals[x]) || (P.keys.indexOf(x) - P.keys.indexOf(y)));
 
-// What the reveal card shows for one animal (written by the host just before the card appears).
 export function buildReveal(P, a, scores, truth) {
   const an = P.animals[a], out = { a, id: an.id, kind: null, species: null, nums: [] };
   P.steps.forEach((st, i) => {

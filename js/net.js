@@ -1,29 +1,3 @@
-// =====================================================================
-// net.js — Firebase Realtime Database layer (modular SDK, no auth).
-//
-// DATABASE LAYOUT
-// rooms/{CODE}/                       CODE = 4 letters
-//   meta/            { createdAt, hostKey, pack, mode, settings:{...}, phase }   pack: category pack id (default "animals"), mode: game mode id (default "classic")
-//                    phase: one of the active mode's `phases` (classic: lobby|draft|lineup|tournament|results)
-//   meta/settings/   { startBalance, rosterSize, auctionSeconds, spectatorVoting, judgeMode, appealOutcome, filters:{...} }
-//   host/            { key, sid, hb }              heartbeat written every 3 s; claimed by transaction when stale > 10 s
-//   conns/{sid}/     { key, role, t }              role: player|spectator; removed onDisconnect; max 10
-//   players/{key}/   { name, joinedAt, sid, appealTokens, online }       key = trimmed lowercase name; newest sid wins
-//   spectators/{sid}/{ name, joinedAt }
-//   game/            { pool:[ids], poolSeed, keys:[nameKeys], lineupDeadline }
-//   ledger/          { balances:{key:n}, rosters:{key:[{id,price}]}, drawIndex, stall, applied:{auctionId:true}, last, log:{id:text} }
-//   auction/         { id, animalId, status, deadline, top:{key,amt}|null, skips:{key:true}, eligible:{key:true},
-//                      limits:{key:balance}, claim:{key,deadline}|null, resolved:false }   status: bidding|claim|done
-//   lineups/{key}/   { order:[animalIds], done:true }
-//   tour/            { format, keys, lineups, seed, rounds, round, byes, labels, fights:{fightId:{a,b,label,arena,seed,teamA,teamB,startAt,
-//                      status, result:{winner,survivors,ticks,digest}, final, replayOf}}, state, currentFight, nextAt, results }
-//                      state: awaitNext|playing|appeal|finishing|done
-//   fights/{fightId}/narration   AI narration (written later by the AI hook, optional)
-//   appeals/{fightId}/ { by, status, claims:[{text,eventId}], rebuttal:[...], rebutDone, voters, votes:{id:bool}, verdicts, response, upheld, outcome, deadline }
-//                      status: open|submitted|rebuttal|voting|ai|rematch|resolved|waived
-//   chat/{pushId}/   { name, text, spec, t }       last 100 kept (host prunes)
-// stats/{nameKey}/   { name, games_played, fights_won, fights_lost, fights_drawn, tournaments_won, animals_drafted }
-// =====================================================================
 import * as R from "./rules.js";
 
 const V = R.FIREBASE_VERSION;
@@ -81,7 +55,6 @@ export async function createRoom(name, settings, extra = {}) {
   throw new Error("Could not allocate a room code, try again");
 }
 
-// Join as player or spectator. Enforces max 6 players / 10 connections. Returns {role, key}.
 export async function joinRoom(code, name, wantRole) {
   const meta = await getVal(code, "meta");
   if (!meta) throw new Error("Room not found");
@@ -91,10 +64,10 @@ export async function joinRoom(code, name, wantRole) {
   if (role === "player") {
     if (meta.phase && meta.phase !== "lobby") {
       const ex = await getVal(code, `players/${key}`);
-      if (!ex) role = "spectator"; // game already running: newcomers can only watch
+      if (!ex) role = "spectator";
     }
   }
-  // connection cap (counts distinct sessions)
+
   const cres = await runTransaction(rp(code, "conns"), (cur) => {
     cur = cur || {};
     if (!cur[sid] && Object.keys(cur).length >= R.MAX_CONNECTIONS) return undefined;
@@ -108,9 +81,9 @@ export async function joinRoom(code, name, wantRole) {
       if (!cur) {
         return { name: nm, joinedAt: serverTimestamp(), sid, appealTokens: 1, online: true, role: "player" };
       }
-      return { ...cur, name: nm, sid, online: true }; // newest session wins
+      return { ...cur, name: nm, sid, online: true };
     }, { applyLocally: false });
-    // enforce 6-player cap only for brand-new seats
+
     const players = (await getVal(code, "players")) || {};
     if (Object.keys(players).length > R.MAX_PLAYERS && pres.snapshot.val().sid === sid && !(meta.settings && players[key] && players[key].old)) {
       const mine = players[key];
@@ -134,13 +107,12 @@ export async function leaveRoom(code, role, key) {
   } catch (e) { console.warn(e); }
 }
 
-// re-assert presence after a reconnect (full resync is automatic via watchers)
 export async function reassert(code, role, key, name) {
   await set(rp(code, `conns/${sid}`), { key, role, t: Date.now() });
   onDisconnect(rp(code, `conns/${sid}`)).remove();
   if (role === "player") {
     const cur = await getVal(code, `players/${key}`);
-    if (cur && cur.sid !== sid) return false; // someone took the seat over
+    if (cur && cur.sid !== sid) return false;
     await update(rp(code, `players/${key}`), { online: true, sid });
     onDisconnect(rp(code, `players/${key}/online`)).set(false);
   } else {
@@ -150,9 +122,7 @@ export async function reassert(code, role, key, name) {
   return true;
 }
 
-// ---------- host election ----------
 export const beat = (code, key) => update(rp(code, "host"), { key, sid, hb: serverTimestamp() });
-// Try to take host if the heartbeat is stale. Caller must already have checked it has the lowest joinedAt.
 export async function claimHost(code, key) {
   const res = await runTransaction(rp(code, "host"), (cur) => {
     const t = now();
@@ -162,7 +132,6 @@ export async function claimHost(code, key) {
   return res.committed;
 }
 
-// ---------- auction transactions (pure transform + runner) ----------
 export function applyBid(a, key, amount, t) {
   if (!a || a.status !== "bidding" || a.resolved) return undefined;
   if (!(a.eligible && a.eligible[key])) return undefined;
@@ -182,7 +151,7 @@ export function applySkip(a, key) {
   if (!a || a.resolved) return undefined;
   if (a.status === "bidding") {
     if (!(a.eligible && a.eligible[key])) return undefined;
-    if (a.top && a.top.key === key) return undefined; // top bidder cannot skip
+    if (a.top && a.top.key === key) return undefined;
     a.skips = a.skips || {}; a.skips[key] = true; return a;
   }
   if (a.status === "claim" && a.claim && a.claim.key === key) { a.claim = { ...a.claim, declined: true }; return a; }
@@ -198,7 +167,6 @@ export const bid = (code, key, amount) => run(code, (a) => applyBid(a, key, amou
 export const skip = (code, key) => run(code, (a) => applySkip(a, key));
 export const claimFree = (code, key) => run(code, (a) => applyClaim(a, key, now()));
 
-// ---------- chat ----------
 let lastChat = 0;
 export async function sendChat(code, name, text, spec) {
   const t = Date.now();
@@ -222,7 +190,6 @@ export async function pruneChat(code) {
   await update(rp(code, "chat"), up);
 }
 
-// ---------- stats ----------
 export async function bumpStats(key, name, delta) {
   await runTransaction(ref(db, `stats/${key}`), (cur) => {
     const s = cur || { name, games_played: 0, fights_won: 0, fights_lost: 0, fights_drawn: 0, tournaments_won: 0, animals_drafted: 0 };
@@ -241,7 +208,6 @@ export async function lookupStats(name) {
   return v ? { key: nameKey(name), ...v } : null;
 }
 
-// ---------- Screen Wake Lock (host device) ----------
 let wake = null;
 export async function keepAwake() {
   try { if ("wakeLock" in navigator) { wake = await navigator.wakeLock.request("screen"); wake.addEventListener("release", () => { wake = null; }); } } catch (e) { console.warn("wake lock", e); }

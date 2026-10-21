@@ -1,6 +1,3 @@
-// =====================================================================
-// sim.js — pure, deterministic fight engine. No Date, no Math.random.
-// =====================================================================
 import * as R from "./rules.js";
 const { TAGS } = R;
 const TU = R.TRAIT_UP, TD = R.TRAIT_DOWN;
@@ -22,7 +19,6 @@ export function sizeFromMass(m) {
 }
 export function hpOf(a) { return R.HP_BASE + a.size * R.HP_SIZE_K + a.stamina * R.HP_STAMINA_K; }
 
-// opts.arenaLabel: display name of the arena for the first event (cosmetic, never affects the result). Default: the arena id, capitalised.
 export function simulate(teamA, teamB, arena, seed, opts = {}) {
   const rng = mulberry32(seed >>> 0);
   const rr = (a, b) => a + (b - a) * rng();
@@ -196,19 +192,16 @@ export function simulate(teamA, teamB, arena, seed, opts = {}) {
     }
   }
 
-  // ---- setup ----
   emit(0, "arena_effect", null, null, 0, `Arena: ${opts.arenaLabel || arena.charAt(0).toUpperCase() + arena.slice(1)}`);
   for (const u of units) {
     const b = (u.a.arena_bonus && u.a.arena_bonus[arena]) || 0;
     if (Math.abs(b) >= 5) emit(0, "arena_effect", u.key, null, b, `${u.a.name} ${b > 0 ? "gains" : "loses"} ${Math.abs(b)}% damage here`);
   }
 
-  // ---- main loop ----
   let lastTick = 0;
   for (let tick = 1; tick <= R.MAX_TICKS && !result; tick++) {
     lastTick = tick;
     refresh(tick);
-    // morale (tenacious never flees; skittish bolts after one loss; faint-hearted bolts once limping)
     for (const s of ["A", "B"]) {
       if (result) break;
       const lost = T[s].length - active(s).length;
@@ -231,7 +224,6 @@ export function simulate(teamA, teamB, arena, seed, opts = {}) {
       }
     }
     if (result) break;
-    // venom damage-over-time (only bites within VENOM_WINDOW ticks count; discarded when the fight ends)
     for (const u of units) {
       if (result) break;
       if (u.state !== "active" || !u.dots.length) continue;
@@ -245,14 +237,12 @@ export function simulate(teamA, teamB, arena, seed, opts = {}) {
       checkEnd(tick);
     }
     if (result) break;
-    // regenerating strength: heal a little each round
     for (const u of units) {
       if (u.state !== "active" || u.up !== "regenerating" || u.hp >= u.maxHp - 1e-9) continue;
       const heal = Math.min(u.maxHp - u.hp, u.maxHp * TU.regenerating.frac);
       u.hp += heal; u.tr.up.n++; u.tr.up.amt += heal;
       emit(tick, "status", u.key, u.key, r1(heal), `${u.a.name} regenerates ${r1(heal)} HP [Regenerating]`, "regen");
     }
-    // act order
     const order = units.filter((u) => u.state === "active")
       .map((u) => ({ u, k: u.a.speed * (u.limp ? R.LIMP_SPEED : 1) * (u.down === "slow_start" && tick <= TD.slow_start.ticks ? TD.slow_start.mult : 1) + rng() * R.SPEED_JITTER }))
       .sort((x, y) => y.k - x.k || (x.u.key < y.u.key ? -1 : 1));
@@ -267,7 +257,6 @@ export function simulate(teamA, teamB, arena, seed, opts = {}) {
     emit(R.MAX_TICKS, "end", null, null, 0, "Tick cap reached: draw");
   }
 
-  // ---- autopsy (all values from the real simulation) ----
   const nameOf = (k) => (byKey(k) ? byKey(k).a.name : k);
   const autopsy = units.map((u) => {
     const dt = Object.entries(u.taken).map(([k, amount]) => {
@@ -324,8 +313,6 @@ function describeBase(e) {
   return `${e.name} ${verb} at tick ${e.tick}${top ? `, mostly from ${top.source} (${Math.round(top.amount)})` : ""}. ${RULE_TEXT[e.targetedBecause] || ""}`.trim();
 }
 
-// Engine-level validation. `pack` (optional) supplies the arena ids and a validate(entity) hook for pack-specific fields
-// (animals: class, habitats, mass_kg, size-from-mass). Without a pack the arena ids are inferred from the data itself.
 export function validateAnimals(list, pack) {
   const out = [], seen = new Set();
   const int = (v) => Number.isInteger(v);
@@ -365,7 +352,6 @@ export function validateAnimals(list, pack) {
   return out;
 }
 
-// arenaIds (optional): the pack's arena ids; default = inferred from the data (same order as arena_bonus keys).
 export function balanceTest(list, n = 2000, arenaIds) {
   const arenas = arenaIds || [...new Set(list.flatMap((a) => Object.keys(a.arena_bonus || {})))];
   const rng = mulberry32(12345);

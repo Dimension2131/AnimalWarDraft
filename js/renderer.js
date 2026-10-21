@@ -1,11 +1,3 @@
-// =====================================================================
-// renderer.js — Canvas 2D arena. It ONLY plays events[]; it never decides anything.
-// Exports: createRenderer(canvas, callbacks), renderEventLog(), renderLossCards()
-//
-// Look: every arena is a two-ink print (pattern + halftone on tinted paper), every fighter is a
-// stamped disc whose animal silhouette is printed in its side's ink (A = blue, B = pink) with a
-// second ink slightly off-register underneath. Hits leave ink splats instead of particle sparks.
-// =====================================================================
 import * as R from "./rules.js";
 import { hpOf, describeAutopsy } from "./sim.js";
 
@@ -16,7 +8,10 @@ const SIDE = { A: BLUE, B: PINK };
 const UNDER = { A: "rgba(232,51,111,.55)", B: "rgba(35,64,200,.5)" };
 const TAU = Math.PI * 2;
 const reduceMotion = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
-
+export function coverRect(iw, ih, size, focusY = 0.3) {
+  const k = Math.max(size / iw, size / ih), w = iw * k, h = ih * k;
+  return { x: -w / 2, y: -size / 2 - (h - size) * focusY, w, h };
+}
 const imgCache = new Map();
 function getImg(url) {
   if (!url) return null;
@@ -24,9 +19,6 @@ function getImg(url) {
   if (!i) { i = new Image(); i.crossOrigin = "anonymous"; i.onerror = () => { i.bad = true; }; i.src = url; imgCache.set(url, i); }
   return i.complete && !i.bad && i.naturalWidth ? i : null;
 }
-// Silhouettes are black on transparent; re-ink them on an offscreen canvas in the colour we need.
-// (No crossOrigin on purpose: we only draw the result, never read pixels, so a missing CORS header cannot break it.)
-// Returns a state object: { canvas } once ready, { bad:true } if the file failed, otherwise still loading.
 const silCache = new Map();
 function getSil(url, color) {
   if (!url) return null;
@@ -48,10 +40,6 @@ function getSil(url, color) {
 const initials = (n) => String(n || "?").split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
-
-// ---------------------------------------------------------------------
-// Arena art. Each scene is drawn ONCE into an offscreen canvas (see drawBg) and re-used every frame.
-// ---------------------------------------------------------------------
 function halftone(c, x, y, w, h, color, fromTop, max) {
   c.fillStyle = color; const step = 8;
   for (let j = 0; j * step < h; j++) {
@@ -60,7 +48,6 @@ function halftone(c, x, y, w, h, color, fromTop, max) {
     for (let i = 0; i * step < w + step; i++) { c.beginPath(); c.arc(x + i * step + (j % 2) * (step / 2), y + j * step, rr, 0, TAU); c.fill(); }
   }
 }
-// Water: overlapping wave scales (seigaiha), cold two-blue print.
 function sceneWater(c, W, H) {
   c.fillStyle = "#0f3642"; c.fillRect(0, 0, W, H);
   for (let i = 0; i < 9; i++) {
@@ -72,7 +59,6 @@ function sceneWater(c, W, H) {
     c.strokeStyle = "rgba(51,214,192,.4)"; c.lineWidth = 2; c.stroke();
   }
 }
-// Forest: flat pine silhouettes in rows, yellow pollen dots.
 function sceneForest(c, W, H, rnd) {
   c.fillStyle = "#133522"; c.fillRect(0, 0, W, H);
   let row = 0;
@@ -86,7 +72,6 @@ function sceneForest(c, W, H, rnd) {
   c.fillStyle = "rgba(255,210,58,.5)";
   for (let i = 0; i < 40; i++) { c.beginPath(); c.arc(rnd() * W, rnd() * H, 1.8, 0, TAU); c.fill(); }
 }
-// Desert: wind-swept dune ridges in ochre and gold, a hot sun low in the corner, grain speckle.
 function sceneDesert(c, W, H) {
   const sun = c.createRadialGradient(W * 0.8, H * 0.12, 4, W * 0.8, H * 0.12, W * 0.34);
   sun.addColorStop(0, "rgba(255,210,58,.75)"); sun.addColorStop(0.45, "rgba(255,160,60,.25)"); sun.addColorStop(1, "rgba(255,160,60,0)");
@@ -103,7 +88,6 @@ function sceneDesert(c, W, H) {
   c.fillStyle = "rgba(255,230,160,.35)";
   for (let i = 0; i < 90; i++) { c.fillRect(Math.random() * W, Math.random() * H, 1.4, 1.4); }
 }
-// Plains: rolling flat bands of grass, teal tufts, pink wildflowers.
 function scenePlains(c, W, H, rnd) {
   c.fillStyle = "#2c3a1d"; c.fillRect(0, 0, W, H);
   for (let i = 0; i < 6; i++) {
@@ -208,7 +192,6 @@ export function createRenderer(canvas, cb = {}) {
     layout();
   }
 
-  // ---- applying one event (state always, animation only when !instant) ----
   function floater(u, text, color, big) { if (u) floaters.push({ x: u.x, y: u.y - rad, text, color, t: 0, life: 1000, size: big ? 24 : 16 }); }
   function fire(e, instant) {
     const u = units[e.actor], t = units[e.target];
@@ -307,7 +290,8 @@ export function createRenderer(canvas, cb = {}) {
     ctx.beginPath(); ctx.arc(0, 0, rad, 0, TAU); ctx.fillStyle = PAPER; ctx.fill();
     ctx.save(); ctx.beginPath(); ctx.arc(0, 0, rad - 2, 0, TAU); ctx.clip();
     const im = getImg(u.a.image), sil = u.a.silhouette ? getSil(u.a.silhouette, ink) : null;
-    if (im) ctx.drawImage(im, -rad, -rad, rad * 2, rad * 2);
+    let photo = false;
+    if (im) { const cr = coverRect(im.naturalWidth, im.naturalHeight, rad * 2); ctx.drawImage(im, cr.x, cr.y, cr.w, cr.h); photo = true; }
     else if (sil && sil.canvas) { const sc = sil.canvas, k = (rad * 1.5) / Math.max(sc.width, sc.height); ctx.drawImage(sc, (-sc.width * k) / 2, (-sc.height * k) / 2, sc.width * k, sc.height * k); }
     else if (sil && !sil.bad) { /* silhouette still loading: show the bare disc */ }
     else if (u.a.emoji) { ctx.font = `${rad * 1.1}px serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = INK; ctx.fillText(u.a.emoji, 0, 2); }
@@ -319,6 +303,7 @@ export function createRenderer(canvas, cb = {}) {
     if (u.flash > 0) { ctx.fillStyle = `rgba(255,210,58,${u.flash * 0.85})`; ctx.fillRect(-rad, -rad, rad * 2, rad * 2); }
     ctx.restore();
     ctx.lineWidth = 3; ctx.strokeStyle = live ? INK : GREY; ctx.beginPath(); ctx.arc(0, 0, rad, 0, TAU); ctx.stroke();
+    if (photo && live) { ctx.lineWidth = 4; ctx.strokeStyle = SIDE[u.side]; ctx.beginPath(); ctx.arc(0, 0, rad + 3.5, 0, TAU); ctx.stroke(); }   // a photo has no side tint like the silhouette: the ring says whose fighter it is
     if (u.swoosh > 0) { ctx.strokeStyle = `rgba(22,22,58,${u.swoosh})`; ctx.lineWidth = 2; ctx.setLineDash([4, 4]); ctx.beginPath(); ctx.arc(0, 0, rad + 7, -1, 1); ctx.stroke(); ctx.setLineDash([]); }
     if (!live) { ctx.strokeStyle = GREY; ctx.lineWidth = 3; const d = rad * 0.55; ctx.beginPath(); ctx.moveTo(-d, -d); ctx.lineTo(d, d); ctx.moveTo(d, -d); ctx.lineTo(-d, d); ctx.stroke(); }
     ctx.restore();
@@ -392,7 +377,6 @@ export function createRenderer(canvas, cb = {}) {
   raf = requestAnimationFrame(frame);
 
   return {
-    // fight: {teamA, teamB, arena, events}; startPos = ms already elapsed (negative = countdown)
     load(fight, startPos = 0) {
       teams = { A: fight.teamA, B: fight.teamB }; arena = fight.arena; arenaMeta = fight.arenas || {}; evs = fight.events; pos = startPos; playing = true; ended = false; bgKey = "";
       resize(); initParts(); build();
@@ -406,7 +390,6 @@ export function createRenderer(canvas, cb = {}) {
   };
 }
 
-// ---- side event log with clickable ids (ids are used by appeals) ----
 export function renderEventLog(container, events, upto, opts = {}) {
   container.replaceChildren();
   const ul = document.createElement("ul"); ul.className = "evlog";
@@ -421,7 +404,6 @@ export function renderEventLog(container, events, upto, opts = {}) {
   container.append(ul); container.scrollTop = container.scrollHeight;
 }
 
-// ---- "Why they lost" cards (describeAutopsy text now, AI narration swapped in when it exists) ----
 export function renderLossCards(container, autopsy, narration, opts = {}) {
   container.replaceChildren();
   const nar = Array.isArray(narration) ? narration : narration ? Object.values(narration) : [];

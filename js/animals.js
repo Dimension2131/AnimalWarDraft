@@ -1,10 +1,3 @@
-// =====================================================================
-// animals.js — loads and merges a pack's entity files (pack-aware).
-// To add animals later, add a file name to `entityFiles` in packs/animals/pack.js. That is the ONLY edit needed.
-// To add a whole category, see docs/PACK_FORMAT.md.
-// Back-compat: ANIMALS / ANIMAL_MAP still export the DEFAULT pack's entities exactly as before.
-// All paths are resolved against the repo root from this module's own URL, so GitHub project pages work (no leading "/").
-// =====================================================================
 import { getPack, defaultPackId } from "./pack.js";
 
 const ROOT = new URL("../", import.meta.url);
@@ -29,7 +22,6 @@ async function loadList(pack) {
   return [...byId.values()];
 }
 
-// Optional per-entity traits (strength + weakness): pack.traitsFile default-exports { [id]: { up, down, why } }. Merged onto a COPY of the entity as entity.traits.
 async function attachTraits(pack, list) {
   if (!pack.traitsFile) return list;
   try {
@@ -38,7 +30,6 @@ async function attachTraits(pack, list) {
   } catch (err) { console.warn(`[${pack.id}] traits file not loaded, playing without traits:`, err); return list; }
 }
 
-// Optional silhouettes. Missing or broken file = emoji everywhere, nothing else changes.
 async function attachSilhouettes(pack, list) {
   if (!pack.silhouetteMap) return list;
   try {
@@ -48,11 +39,18 @@ async function attachSilhouettes(pack, list) {
   return list;
 }
 
-// -> { pack, list, map }. Cached per pack id; unknown id = default pack.
+export async function attachImages(pack, list) {
+  if (!pack.imageMap) return list;
+  try {
+    const m = (await import(at(pack.imageMap))).default || {};
+    for (const a of list) if (!a.image && m[a.id] && typeof m[a.id].url === "string") a.image = m[a.id].url;
+  } catch (err) { /* no photo map yet */ }
+  return list;
+}
 export async function loadPackData(id) {
   const pack = await getPack(id);
   if (!cache.has(pack.id)) cache.set(pack.id, (async () => {
-    const list = await attachSilhouettes(pack, await attachTraits(pack, await loadList(pack)));
+    const list = await attachImages(pack, await attachSilhouettes(pack, await attachTraits(pack, await loadList(pack))));
     return { pack, list, map: new Map(list.map((a) => [a.id, a])) };
   })());
   return cache.get(pack.id);

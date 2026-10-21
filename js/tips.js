@@ -1,7 +1,3 @@
-// =====================================================================
-// tips.js — tooltips for stat labels: native `title` on hover (desktop) plus a tap/keyboard popover (phones).
-// tip(el, text) marks an element; installTips() is called once at startup.
-// =====================================================================
 export function tip(el, text) {
   if (!text) return el;
   el.title = text; el.dataset.tip = text; el.tabIndex = 0; el.classList.add("has-tip");

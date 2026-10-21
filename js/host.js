@@ -1,30 +1,18 @@
-// =====================================================================
-// host.js — host-authoritative game logic shared by every mode. Only the current host's device runs startHost().
-// Shared phases here: lobby -> draft -> lineup. Everything a mode adds (classic: tournament, appeals, judge, results)
-// lives in modes/<id>/host.js and is reached through the mode's createHost(ctx) (see docs/MODE_FORMAT.md).
-// Every state change is a guarded transaction, so a host handover can never double-apply anything:
-//   * auctions resolve in two idempotent steps: (1) auction.resolved+outcome (tx on auction),
-//     (2) apply to ledger keyed by auction id (tx on ledger, ledger.applied[id]).
-// =====================================================================
 import * as R from "./rules.js";
 import * as N from "./net.js";
 import { simulate, mulberry32 } from "./sim.js";
 import { arr, hash, shuffleSeeded } from "./util.js";
 import { filterPool as packFilterPool, arenaOf, defaultFilters } from "./pack.js";
 import { nextPhase } from "./modes.js";
-// Back-compat re-exports: these used to live in this file and now live in the classic mode (nothing else changed).
+
 export { shuffleSeeded };
 export { digestOf, fingerprint, aiNarrate, aiJudgeAppeal, roundRobin, computeStandings, advance, makeTour } from "../modes/classic/host.js";
-
-// ---------- pure helpers (also used by the lobby UI) ----------
-// filterPool(entities, filters, pack): the pack defines the filters (the old 2-argument form no longer exists: filters are pack-specific).
 export function filterPool(animals, f, pack) {
   if (!pack) throw new Error("filterPool needs the pack (js/pack.js getPack)");
   return packFilterPool(animals, f, pack);
 }
 export const minPool = (players, roster) => players * roster + R.POOL_MARGIN;
 
-// Should this device try to claim host? (lowest joinedAt among online players, never the stale host, never spectators)
 export function shouldClaimHost({ players, host, myKey }) {
   const t = N.now();
   if (host && host.hb && t - host.hb < R.HOST_STALE_MS) return false;
@@ -32,7 +20,6 @@ export function shouldClaimHost({ players, host, myKey }) {
   return cand.length > 0 && cand[0][0] === myKey;
 }
 
-// Pure auction decision from a snapshot. Used both to decide and inside the transaction to re-validate.
 export function decideAuction(A, online, t) {
   if (!A || A.resolved) return null;
   const skips = A.skips || {}, part = Object.keys(A.participants || {});
@@ -56,10 +43,6 @@ export function decideAuction(A, online, t) {
   return null;
 }
 
-// =====================================================================
-// startHost({ code, key, animals, pack, mode })
-//   animals: the pack's entity list; pack: its manifest; mode: the active mode module (modes/<id>/mode.js)
-// =====================================================================
 export function startHost({ code, key, animals, pack, mode, onLog = () => {} }) {
   const S = {}; const unsubs = []; let busy = false, stopped = false, loopT, beatT, pruneT;
   const map = new Map(animals.map((a) => [a.id, a]));
@@ -73,9 +56,8 @@ export function startHost({ code, key, animals, pack, mode, onLog = () => {} }) 
   const fightSim = (A, B, arena, seed) => simulate(A, B, arena, seed, { arenaLabel: arenaOf(pack, arena).label });
   const modeHost = mode.createHost ? mode.createHost({ code, S, settings, nm, an, log, map, pack, simulate: fightSim }) : {};
 
-  // ---------- lobby -> first phase ----------
   async function startGame() {
-    if (modeHost.start) return modeHost.start();   // modes without a draft (quiz) start themselves
+    if (modeHost.start) return modeHost.start();
     const s = settings(), players = Object.entries(S.players || {}).filter(([, p]) => p.role !== "x").sort((a, b) => (a[1].joinedAt || 0) - (b[1].joinedAt || 0)).map(([k]) => k);
     if (players.length < 2) throw new Error("Need at least 2 players");
     const f = s.filters || defaultFilters(pack);
@@ -91,7 +73,6 @@ export function startHost({ code, key, animals, pack, mode, onLog = () => {} }) 
     log("game started", ids.length, pack.nouns.plural, "in pool");
   }
 
-  // ---------- draft ----------
   const rosterOf = (k) => arr(((S.ledger || {}).rosters || {})[k]);
   async function applyOutcome(o) {
     const text = o.kind === "win" ? `${nm(o.winner)} won ${an(o.animalId)} for $${o.price}`
@@ -152,7 +133,6 @@ export function startHost({ code, key, animals, pack, mode, onLog = () => {} }) 
     log("draft finished");
   }
 
-  // ---------- lineup -> next phase ----------
   async function lineupStep() {
     const G = S.game; if (!G) return;
     if (!G.lineupDeadline) return N.tx(code, "game/lineupDeadline", (c) => c || N.now() + R.LINEUP_MS);
@@ -170,12 +150,11 @@ export function startHost({ code, key, animals, pack, mode, onLog = () => {} }) 
     if (ok) await N.put(code, "meta/phase", next);
   }
 
-  // ---------- main loop ----------
   async function step() {
     const phase = S.meta && S.meta.phase; if (!phase) return;
     if (phase === "draft") return draftStep();
     if (phase === "lineup") return lineupStep();
-    if (modeHost.step) return modeHost.step(phase);   // any phase the mode added
+    if (modeHost.step) return modeHost.step(phase);
   }
   loopT = setInterval(async () => {
     if (busy || stopped) return; busy = true;

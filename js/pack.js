@@ -1,7 +1,3 @@
-// =====================================================================
-// pack.js — category-pack runtime: registry access, filters, theme. See docs/PACK_FORMAT.md.
-// No Firebase, no DOM except applyPack(). Safe to import from Node tests.
-// =====================================================================
 import LOADERS from "../packs/index.js";
 import { arr } from "./util.js";
 import * as R from "./rules.js";
@@ -9,7 +5,7 @@ import * as R from "./rules.js";
 const cache = new Map();
 let manifests = null;
 
-// All registered pack manifests (loads each manifest once). Order = packs/index.js order; the first one is the default.
+
 export async function listPacks() {
   if (!manifests) {
     manifests = [];
@@ -21,7 +17,7 @@ export async function listPacks() {
   return manifests;
 }
 export async function defaultPackId() { return (await listPacks())[0].id; }
-// Unknown id falls back to the default pack (a room made by a newer version must not brick this client).
+
 export async function getPack(id) {
   const all = await listPacks();
   return all.find((p) => p.id === id) || all[0];
@@ -31,8 +27,6 @@ export const arenaIds = (pack) => pack.arenas.map((a) => a.id);
 export const arenaOf = (pack, id) => pack.arenas.find((a) => a.id === id) || { id, label: id, icon: "", art: "plains" };
 export const statOf = (pack, key) => pack.stats.find((s) => s.key === key);
 export const engineStats = (pack) => pack.stats.filter((s) => s.key !== "size");
-// Toughness table for a list of entities: id -> { v: rounded effective HP, pct: 0-100 relative to the toughest in the list, rank: 1 = toughest, of: list size }.
-// Display only (R.toughnessOf); the fight never reads it. Cached per list.
 const toughCache = new WeakMap();
 export function toughnessTable(list) {
   if (toughCache.has(list)) return toughCache.get(list);
@@ -43,11 +37,9 @@ export function toughnessTable(list) {
   return m;
 }
 export const cap = (s) => String(s || "").charAt(0).toUpperCase() + String(s || "").slice(1);
-// {id: {label, art}} handed to the renderer so it can draw and name arenas of any pack.
+
 export const arenaMeta = (pack) => Object.fromEntries(pack.arenas.map((a) => [a.id, { label: a.label, art: a.art }]));
 
-// ---- filters ----
-// Defaults identical to the old R.DEFAULT_SETTINGS.filters for the animals pack.
 export function defaultFilters(pack) {
   const f = {};
   for (const d of pack.filters) {
@@ -57,7 +49,7 @@ export function defaultFilters(pack) {
   }
   return f;
 }
-// Fills holes (Firebase drops empty arrays) so the UI and host never see undefined.
+
 export function normFilters(pack, f) {
   const out = { ...(f || {}) };
   for (const d of pack.filters) {
@@ -67,6 +59,7 @@ export function normFilters(pack, f) {
   }
   return out;
 }
+
 export function filterPool(entities, f, pack) {
   f = f || {};
   const defs = pack.filters, ex = new Set(arr(f.excluded));
@@ -85,7 +78,6 @@ export function filterPool(entities, f, pack) {
   });
 }
 
-// ---- theme / title (browser only) ----
 let applied = [];
 export function applyPack(pack) {
   if (typeof document === "undefined") return;

@@ -1,6 +1,3 @@
-// =====================================================================
-// util.js — tiny pure helpers shared by host.js and the mode host modules. No imports besides sim.js's RNG.
-// =====================================================================
 import { mulberry32 } from "./sim.js";
 
 export const arr = (v) => (Array.isArray(v) ? v : v ? Object.values(v) : []);

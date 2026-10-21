@@ -1,7 +1,3 @@
-// =====================================================================
-// app.js — UI, routing, host election, and every client write the host waits for.
-// Hidden pages: ?validate and ?balance (work without Firebase configured).
-// =====================================================================
 import * as R from "./rules.js";
 import { loadPackData } from "./animals.js";
 import * as P from "./pack.js";
@@ -11,12 +7,10 @@ import { simulate, validateAnimals, balanceTest } from "./sim.js";
 
 const $ = (s, r = document) => r.querySelector(s);
 const arr = (v) => (Array.isArray(v) ? v : v ? Object.values(v) : []);
-// Animal icon: silhouette image when we have one (falls back to the emoji if it fails to load).
 const icon = (a) => {
   const em = () => h("span", { class: "emoji" }, a.emoji);
   return a.silhouette ? h("img", { class: "sil", src: a.silhouette, alt: a.name || "", loading: "lazy", onerror: (e) => e.target.replaceWith(em()) }) : em();
 };
-// Home-screen hero: three random silhouettes, printed in blue / pink / teal and overlapped. Title + tagline come from the pack.
 function hero(pack, list) {
   const pool = list.filter((a) => a.silhouette), picks = [], inks = ["blue", "pink", "teal"];
   while (pool.length && picks.length < 3) picks.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
@@ -38,14 +32,12 @@ function h(tag, attrs, ...kids) {
   return e;
 }
 const root = $("#app");
-// Warm the browser cache so every silhouette is ready before its lot comes up.
 const warmed = new Set();
 const warm = (list) => setTimeout(() => { for (const a of list) if (a.silhouette && !warmed.has(a.silhouette)) { warmed.add(a.silhouette); new Image().src = a.silhouette; } }, 0);
 const secs = (ms) => Math.max(0, Math.ceil(ms / 1000));
 let toastT;
 function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("show"), 3500); }
 
-// ---------------- hidden pages ----------------
 async function pageValidate() {
   const { pack, list: ANIMALS } = await loadPackData(new URLSearchParams(location.search).get("pack"));
   const v = validateAnimals(ANIMALS, pack);
@@ -67,7 +59,6 @@ async function pageBalance() {
   }, 30);
 }
 
-// ---------------- main ----------------
 async function main() {
   const q = location.search;
   if (/[?&]validate\b/.test(q)) return pageValidate();
@@ -78,7 +69,6 @@ async function main() {
 
   installTips();
   const S = { code: null, role: null, key: null, name: "", connected: true, loaded: {}, chat: [], view: "home" };
-  // Active pack + mode. PK = pack manifest, ENT = { list, map } of its entities, MD = mode module. Set by ensureCtx() from the room's meta.
   const DEFAULT = await loadPackData(); let PK = DEFAULT.pack, ENT = { list: DEFAULT.list, map: DEFAULT.map }, MD = (await M.getMode()), ctxKey = "", ctxLoading = "", MODES = await M.listModes(), PACKS = await P.listPacks();
   const modeScreens = {}; let homePack = PK.id;
   const want = () => (S.meta ? `${S.meta.pack || PACKS[0].id}|${S.meta.mode || MODES[0].id}` : "");
@@ -104,7 +94,6 @@ async function main() {
   const playersSorted = () => Object.entries(S.players || {}).sort((a, b) => (a[1].joinedAt || 0) - (b[1].joinedAt || 0)).map(([k, p]) => ({ key: k, ...p }));
   const voterId = () => (S.role === "player" ? S.key : N.sid);
 
-  // ----- watching -----
   function startWatching(code) {
     stopWatching();
     for (const p of PATHS) unsubs.push(N.watch(code, p, (v) => { S[p] = v; S.loaded[p] = true; schedule(); }));
@@ -128,10 +117,10 @@ async function main() {
     Object.assign(S, { code: null, role: null, key: null, view: "home" }); $("#chat").hidden = true; $("#banner").hidden = true; schedule();
   }
 
-  // ----- host runner & election -----
   function ensureRunner() {
     if (S.role !== "player" || !S.loaded.host || !S.meta || ctxKey !== want()) return;
-    if (isHost() && !runner) runner = H.startHost({ code: S.code, key: S.key, animals: ENT.list, pack: PK, mode: MD });
+    if (runner && runner.modeId !== MD.id) { runner.stop(); runner = null; }
+    if (isHost() && !runner) { runner = H.startHost({ code: S.code, key: S.key, animals: ENT.list, pack: PK, mode: MD }); runner.modeId = MD.id; }
     else if (!isHost() && runner) { runner.stop(); runner = null; }
   }
   async function election() {
@@ -140,7 +129,6 @@ async function main() {
   }
   setInterval(election, 2500);
 
-  // ----- connection / takeover banner -----
   let firstConn = true;
   N.watchConnection((c) => {
     const was = S.connected; S.connected = c; schedule();
@@ -164,21 +152,19 @@ async function main() {
     else if (msg) b.append(msg);
   }
 
-  // ----- routing -----
   const screens = {};
-  // key: identity of the mounted screen (phase + mode), so a mode change remounts. factory: which screen to build.
   function mount(name, key = name, factory = screens[name]) {
     if (key === currentName) return;
     if (current && current.destroy) current.destroy();
     root.replaceChildren(); currentName = key; current = factory();
   }
-  // Phase -> screen: a mode's own screens win; lobby / draft / lineup / results fall back to the shared ones below.
+
   function modeScreen(phase) {
     if (!(MD.id in modeScreens)) modeScreens[MD.id] = MD.screens ? MD.screens(uiCtx) : {};
     return modeScreens[MD.id][phase] || screens[phase] || null;
   }
   function route() {
-    if (booting && !S.code) return mount("loading"); // rejoining after refresh: never flash home
+    if (booting && !S.code) return mount("loading");
     if (!S.code) return mount(S.view === "leaderboard" ? "leaderboard" : "home");
     if (!S.loaded.meta) return mount("loading");
     if (!S.meta) { toast("That room no longer exists."); leave(); return; }
@@ -188,8 +174,6 @@ async function main() {
   }
   setInterval(() => { if (current && current.tick) current.tick(); }, 250);
 
-  // ================= shared widgets =================
-  // ---- toughness + traits (R.TOUGHNESS / R.TRAIT_UP / R.TRAIT_DOWN in rules.js; data: pack.traitsFile) ----
   const toughOf = (a) => (a && P.toughnessTable(ENT.list).get(a.id)) || (a ? { v: Math.round(R.toughnessOf(a)), pct: 50, rank: 0, of: 0 } : null);
   const toughTip = (t) => R.TOUGHNESS.description + (t && t.rank ? ` This one: ${t.v}, rank #${t.rank} of ${t.of}.` : "");
   const toughRow = (a) => { const t = toughOf(a); return h("div", { class: "stat s-toughness" }, tip(h("span", {}, R.TOUGHNESS.label), toughTip(t)), h("div", { class: "sbar" }, h("i", { style: `width:${t ? t.pct : 0}%` })), h("b", {}, t ? t.v : "?")); };
@@ -207,7 +191,6 @@ async function main() {
     const zone = (statVals, tileVals, ta) => compact ? null : h("div", { class: "statzone" },
       h("div", { class: "stats" }, stats.map((st) => { const s = st.key; return h("div", { class: "stat s-" + s }, tip(h("span", {}, st.label), st.description), h("div", { class: "sbar" }, h("i", { style: `width:${statVals ? statVals[s] : 0}%` })), h("b", {}, statVals ? statVals[s] : "?")); }), toughRow(ta)),
       h("div", { class: "arena-tiles" }, PK.arenas.map((arn) => { const ar = arn.id, v = tileVals ? (tileVals[ar] || 0) : null; return h("div", { class: "atile " + (v == null ? "zero" : v > 0 ? "good" : v < 0 ? "bad" : "zero") }, h("span", {}, arn.label), h("b", {}, v == null ? "?" : `${v > 0 ? "+" : ""}${v}`)); })));
-    // Placeholder plate: same skeleton as a real animal, every value a "?", so the draft screen never changes height.
     if (!a) return h("div", { class: "acard ph" },
       h("div", { class: "plate-head" }, h("div", { class: "medal" }, h("span", { class: "qmark" }, "?")), h("div", { class: "grow" }, h("strong", { class: "aname" }, "???"), h("div", { class: "special" }, note || `Next ${PK.nouns.singular}…`))),
       h("div", { class: "row meta" }, [1, 2, 3].map(() => h("span", { class: "chip-s" }, "?"))),
@@ -223,11 +206,7 @@ async function main() {
   }
   const bar = (total) => { const i = h("i"); const marks = total ? h("div", { class: "cmarks" }, [0.25, 0.5, 0.75].map((f) => h("span", { style: `left:${f * 100}%` }, `${Math.round(total * f)}s`))) : null; return { el: h("div", { class: "cwrap" }, h("div", { class: "cbar" }, i), marks), set(f) { i.style.width = Math.max(0, Math.min(1, f)) * 100 + "%"; i.className = f < 0.25 ? "low" : ""; } }; };
   const screen = (...k) => { const s = h("section", { class: "screen" }, ...k); root.append(s); return s; };
-
-  // Compact stat line (label tooltips from the pack) used by the lineup and fight screens.
   const statStrip = (a) => h("span", { class: "sstrip" }, ...P.engineStats(PK).map((st) => h("span", { class: "sp s-" + st.key }, tip(h("i", {}, st.abbr || st.label), st.description), h("b", {}, a[st.key]))), toughChip(a), ...traitPills(a, false));
-
-  // The UI context handed to a mode's screens (docs/MODE_FORMAT.md "UI context").
   const uiCtx = {
     h, screen, arr, secs, toast, schedule, icon, bar, animalCard, statStrip, tip, S, N, R,
     nameOf, isHost, voterId, settings, leave: () => leave(),
@@ -281,11 +260,9 @@ async function main() {
     const num = (key, min, max) => h("input", { type: "number", min, max, onchange: (e) => edit((s) => { s[key] = Math.max(min, Math.min(max, Math.floor(+e.target.value) || min)); }) });
     const inBal = num("startBalance", 10, 100000), inRos = num("rosterSize", R.ROSTER_MIN, R.ROSTER_MAX), inSec = num("auctionSeconds", 5, 120);
     const cbMystery = h("input", { type: "checkbox", onchange: (e) => edit((s) => { s.mysteryTraits = e.target.checked; }) });
-    // Mode selector (fed by modes/index.js) + the mode's own settings panel.
     const selMode = h("select", { onchange: (e) => { if (isHost()) N.put(S.code, "meta/mode", e.target.value).catch((er) => toast(er.message)); } }, MODES.map((m) => h("option", { value: m.id }, m.title)));
     const modeDesc = h("p", { class: "muted small" }, MD.description || "");
-    const modePanel = MD.settingsPanel ? MD.settingsPanel({ h, edit, isHost }) : { nodes: [], refresh() {} };
-    // Filters are generated from the pack: chips | range | exclude.
+    const modePanel = MD.settingsPanel ? MD.settingsPanel({ h, edit, isHost, pack: PK }) : { nodes: [], refresh() {} };
     const buildFilter = (d) => {
       if (d.type === "chips") {
         const row = h("div", { class: "row wrap" }, d.options.map((x) => h("button", { type: "button", class: "chip", "aria-pressed": "false", "data-v": x, onclick: () => edit((s) => { const a = new Set(s.filters[d.id]); a.has(x) ? a.delete(x) : a.add(x); s.filters[d.id] = [...a]; }) }, x)));
@@ -330,16 +307,18 @@ async function main() {
       cbMystery.checked = !!L.mysteryTraits; cbMystery.disabled = !host;
       modePanel.refresh(L, host);
       widgets.forEach((w) => w.refresh(f, host));
-      const n = H.filterPool(ENT.list, f, PK).length, np = Object.keys(S.players || {}).length, need = H.minPool(Math.max(np, 2), L.rosterSize), ok = n >= need;
-      poolInfo.className = "poolinfo " + (ok ? "ok" : "bad"); poolInfo.textContent = `Pool: ${n} ${PK.nouns.plural} (need at least ${need} for ${Math.max(np, 2)} players × ${L.rosterSize} + ${R.POOL_MARGIN})`;
+      const n = H.filterPool(ENT.list, f, PK).length, np = Object.keys(S.players || {}).length, need = MD.noDraft ? 1 : H.minPool(Math.max(np, 2), L.rosterSize), ok = n >= need;
+      poolInfo.className = "poolinfo " + (ok ? "ok" : "bad"); poolInfo.textContent = MD.noDraft ? `Pool: ${n} ${PK.nouns.plural}` : `Pool: ${n} ${PK.nouns.plural} (need at least ${need} for ${Math.max(np, 2)} players × ${L.rosterSize} + ${R.POOL_MARGIN})`;
       startBtn.hidden = !host; startBtn.disabled = !(host && runner && ok && np >= 2);
     }
+    const draftBox = h("div", {}, h("div", { class: "grid2" }, h("label", {}, "Starting balance ($)", inBal), h("label", {}, "Roster size (3-8)", inRos), h("label", {}, "Auction seconds", inSec)),
+      PK.traitsFile ? h("label", { class: "row" }, cbMystery, " Mystery traits: strength and weakness show as ??? while an animal is up for auction") : null);
+    draftBox.hidden = !!MD.noDraft;
     screen(h("div", { class: "card center" }, h("div", { class: "muted" }, "Room code"), h("div", { class: "bigcode" }, S.code), h("div", { class: "muted small" }, "Friends join with this code (max 6 players, 10 connections).")),
       h("div", { class: "card" }, h("h3", {}, "Players"), plist, specInfo),
       h("div", { class: "card" }, h("h3", {}, "Settings"),
         h("label", {}, "Mode", selMode), modeDesc,
-        h("div", { class: "grid2" }, h("label", {}, "Starting balance ($)", inBal), h("label", {}, "Roster size (3-8)", inRos), h("label", {}, "Auction seconds", inSec)),
-        PK.traitsFile ? h("label", { class: "row" }, cbMystery, " Mystery traits: strength and weakness show as ??? while an animal is up for auction") : null,
+        draftBox,
         ...modePanel.nodes),
       h("div", { class: "card" }, h("h3", {}, `${P.cap(PK.nouns.singular)} pool`), ...widgets.flatMap((w) => w.nodes), poolInfo),
       startBtn, h("p", { class: "muted center small" }, "Waiting for the host to start…"));
@@ -369,9 +348,8 @@ async function main() {
     const bidBox = h("div", { class: "card bidbox" }, h("div", { class: "quickrow" }, quick("+1", () => topAmt() + 1), quick("+5", () => topAmt() + 5), quick("+10", () => topAmt() + 10), quick("Max", () => +bidIn.max)), h("div", { class: "bidrow" }, bidIn, bidBtn, skipBtn));
     const claimBox = h("div", { class: "card claimbox" }, h("p", { class: "small" }, "You are the last one left: claim it free, or skip."), h("div", { class: "row" }, claimBtn, h("button", { class: "btn", onclick: doSkip }, "Skip")));
     const idleBox = h("div", { class: "idlebox" }, "Your bid controls appear here");
-    const slot = h("div", { class: "actionslot" }, bidBox, claimBox, idleBox); // fixed-height slot: bid box, claim box or idle box swap inside it
+    const slot = h("div", { class: "actionslot" }, bidBox, claimBox, idleBox);
     const tbl = h("div", { class: "card d-tbl" }), logBox = h("div", { class: "card d-log" }), rosters = h("div", { class: "card d-ros" });
-    // The dock holds everything you need to bid (price, timer, buttons). On phones it sticks to the bottom of the screen so the animal and the buttons are visible together.
     const dock = h("div", { class: "card lotcard dock d-dock" }, h("div", { class: "dockrow" }, bigBid, cdText), cd.el, msg, slot);
     screen(topInfo, cardBox, dock, tbl, logBox, rosters).classList.add("draftgrid");
     return {
@@ -429,7 +407,7 @@ async function main() {
     const cd = bar(R.LINEUP_MS / 1000), cdText = h("div", { class: "center" }), list = h("div", { class: "card" }, rowsBox), status = h("div", { class: "card" });
     const save = (done) => { dirty = false; return N.put(S.code, `lineups/${S.key}`, { order, done }).catch((e) => toast(e.message)); };
     const readyBtn = h("button", { class: "btn primary big", onclick: () => save(true) }, "Ready");
-    screen(h("h2", {}, "Set your lineup"), h("p", { class: "muted" }, "Drag the handle to reorder. Positions 1-2 are the front line (hit most often). The rest fight from the back."), h("div", { class: "card" }, cd.el, cdText), list, readyBtn, status);
+    screen(h("h2", {}, "Set your lineup"), h("p", { class: "muted" }, (MD.lineup && MD.lineup.hint && MD.lineup.hint(uiCtx)) || "Drag the handle to reorder. Positions 1-2 are the front line (hit most often). The rest fight from the back."), h("div", { class: "card" }, cd.el, cdText), list, readyBtn, status);
     const draftOrder = () => arr(((S.ledger || {}).rosters || {})[S.key]).map((x) => x.id);
     const draw = () => drawRows();
     // keyboard fallback: focus a handle and press Arrow Up / Arrow Down
@@ -439,7 +417,6 @@ async function main() {
       [order[i], order[j]] = [order[j], order[i]]; dirty = true; draw(); save(false);
       const g = rowsBox.children[j] && rowsBox.children[j].querySelector(".grip"); if (g) g.focus();
     }
-    // pointer drag (mouse, touch, pen): the grabbed row follows the pointer, the rows it passes slide out of the way
     function startDrag(e, i) {
       if (e.button != null && e.button !== 0) return;
       e.preventDefault();
@@ -467,8 +444,9 @@ async function main() {
       rowsBox.replaceChildren(...order.map((id, i) => {
         const a = ENT.map.get(id) || { name: id, emoji: "?" };
         const grip = h("button", { class: "grip", type: "button", "aria-label": `Move ${a.name}. Drag, or use the arrow keys.`, title: "Drag to reorder", onpointerdown: (e) => startDrag(e, i), onkeydown: (e) => gripKey(e, i) });
-        return h("div", { class: "lrow" + (i < R.FRONT_SLOTS ? " front" : "") + (i === 0 ? " first" : "") + (i === R.FRONT_SLOTS ? " firstback" : "") },
-          grip, h("span", { class: "pos" }, i + 1), icon(a), h("span", { class: "grow" }, a.name), a.speed != null ? statStrip(a) : null);
+        const sl = MD.lineup && MD.lineup.slot ? MD.lineup.slot(i, a, uiCtx) : null;   // a mode may label slots (race: leg per slot)
+        return h("div", { class: "lrow" + (!sl && i < R.FRONT_SLOTS ? " front" : "") + (i === 0 ? " first" : "") + (!sl && i === R.FRONT_SLOTS ? " firstback" : "") + (sl && sl.cls ? " " + sl.cls : "") },
+          grip, h("span", { class: "pos" }, i + 1), icon(a), h("span", { class: "grow" }, a.name, sl && sl.node), a.speed != null ? statStrip(a) : null);
       }));
     }
     return {
@@ -487,9 +465,7 @@ async function main() {
     };
   };
 
-  // ================= RESULTS (shared fallback) =================
-  // A mode that ends in a plain ranking can write game/results = { order: [playerKeys], scores: { key: number } } and use this screen.
-  // Classic brings its own results screen (modes/classic/screens.js).
+  // ================= RESULTS =================
   screens.results = () => {
     const body = h("div", { class: "card" });
     screen(h("h1", {}, "Results"), body, h("button", { class: "btn primary", onclick: () => leave() }, "Leave room"));
@@ -509,7 +485,6 @@ async function main() {
   });
   $("#chathead").addEventListener("click", () => $("#chat").classList.toggle("open"));
 
-  // ----- boot (auto-rejoin after refresh) -----
   const saved = (() => { try { return JSON.parse(sessionStorage.getItem("adw_room")); } catch (e) { return null; } })();
   if (saved && saved.code) {
     booting = true; schedule();

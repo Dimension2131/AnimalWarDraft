@@ -1,9 +1,3 @@
-// =====================================================================
-// animals/traits.js — ONE strength (up) and ONE weakness (down) per animal, plus a short real-biology reason (why).
-// Default export is an OBJECT keyed by animal id (like animals_facts.js), NOT an entity array: js/animals.js merges it onto
-// each entity as entity.traits (see "traitsFile" in packs/animals/pack.js) and tools/build-worker.mjs inlines it into the Worker.
-// Valid ids: R.TRAIT_UP / R.TRAIT_DOWN in js/rules.js. Check with: node tools/validate_traits.mjs
-// =====================================================================
 export default {
   lion: { up: "intimidating", down: "tires_fast", why: "A lion's roar carries for kilometres and unnerves rivals, but big cats hunt in short bursts and tire fast." },
   african_elephant: { up: "stoic", down: "poor_eyesight", why: "Skin up to 3 cm thick blunts the first blow, but elephants see poorly and rely on smell and hearing." },

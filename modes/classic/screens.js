@@ -1,14 +1,9 @@
-// =====================================================================
-// modes/classic/screens.js — the classic mode's own screens: the tournament/fight screen (with appeals) and the final results.
-// Moved VERBATIM from js/app.js; the app's helpers now arrive through `ctx` (see docs/MODE_FORMAT.md "UI context").
-// =====================================================================
 import * as R from "../../js/rules.js";
 import { createRenderer, renderEventLog, renderLossCards } from "../../js/renderer.js";
 import * as H from "./host.js";
 
 export default function createScreens(ctx) {
   const { h, screen, arr, secs, toast, schedule, nameOf, isHost, voterId, S, N, simulate, statStrip } = ctx;
-  // ================= FIGHT / TOURNAMENT =================
   const screens = {};
   screens.fight = () => {
     const sims = {}, skipped = {}; let rend = null, loadedId = null, logIdx = 0, hlId = null, narrUnsub = null, narrFor = null, narr = null, panelSig = "", warned = {}, bad = {};
@@ -21,7 +16,6 @@ export default function createScreens(ctx) {
     const speedBtns = [1, 2, 4].map((n) => sel(n + "x", () => { if (rend) rend.setSpeed(n); speedBtns.forEach((b, k) => b.classList.toggle("on", [1, 2, 4][k] === n)); }));
     speedBtns[0].classList.add("on");
     ctl.append(playBtn, ...speedBtns, sel("Skip to result", () => { if (rend) { rend.skip(); const f = shownFight(); if (f) skipped[f.id] = true; schedule(); } }), sel("Replay", () => { if (rend) { rend.replay(); playBtn.textContent = "Pause"; } }));
-    // Phones: one column in the old order. Wide screens: arena on the left, result / appeal / event log in a column beside it.
     const side = h("div", { class: "fg-side" }, result, nextBox, panel, h("div", { class: "card" }, h("h3", {}, "Event log"), logBox));
     const teamsCard = h("div", { class: "card teams-card" }); let teamsSig = "";
     const fsec = screen(title, stage, side, h("div", { class: "card fg-loss" }, h("h3", {}, "Why they lost"), cards), teamsCard, stand);
@@ -43,7 +37,6 @@ export default function createScreens(ctx) {
       rend.load({ teamA: arr(f.teamA), teamB: arr(f.teamB), arena: f.arena, arenas: ctx.arenaMeta(), events: sim.events }, N.now() - f.startAt);
       if (S.role) { if (narrUnsub) narrUnsub(); narrFor = f.id; narr = null; narrUnsub = N.watch(S.code, `fights/${f.id}/narration`, (v) => { narr = v; schedule(); }); }
     }
-    // ----- appeals UI (rebuilt only when its signature changes so typed text survives updates) -----
     function claimForm(label, onSubmit) {
       const msgIn = h("textarea", { maxlength: R.APPEAL_TEXT_MAX, rows: 4, placeholder: "Write your message here (one message only)" });
       return h("div", { class: "card" }, h("h3", {}, label), msgIn,
@@ -116,7 +109,7 @@ export default function createScreens(ctx) {
         result.hidden = !rev; result.dataset.done = rev ? "1" : "";
         if (rev) {
           const w = f.final ? f.final.winner : f.result ? f.result.winner : sim.winner, surv = f.final ? f.final.survivors : sim.survivors;
-          result.replaceChildren(h("div", { class: "verdict " + (w === "draw" ? "draw" : w === "A" ? "sa" : "sb") }, w === "draw" ? "Draw" : `${nameOf(w === "A" ? f.a : f.b)} wins`), h("div", { class: "muted small" }, `Survivors: ${nameOf(f.a)} ${surv.A}, ${nameOf(f.b)} ${surv.B}.${f.flipped ? " Flipped on appeal." : ""}${f.replayed ? " Replaced by a rematch." : ""}`), bad[f.id] ? h("div", { class: "small" }, "⚠ This result does not match your own device's re-simulation of the fight. If you lost, appeal it: the judge will check it independently.") : null);
+          result.replaceChildren(h("div", { class: "verdict " + (w === "draw" ? "draw" : w === "A" ? "sa" : "sb") }, w === "draw" ? "Draw" : `${nameOf(w === "A" ? f.a : f.b)} wins`), h("div", { class: "muted small" }, `Survivors: ${nameOf(f.a)} ${surv.A}, ${nameOf(f.b)} ${surv.B}.${f.flipped ? " Flipped on appeal." : ""}${f.replayed ? " Replaced by a rematch." : ""}`), ...(bad[f.id] ? [h("div", { class: "small" }, "⚠ This result does not match your own device's re-simulation of the fight. If you lost, appeal it: the judge will check it independently.")] : []));   // spread, never pass null: native replaceChildren() renders null as the text "null"
           renderLossCards(cards, sim.autopsy, narr, { onClick: hl });
         } else { cards.replaceChildren(h("p", { class: "muted" }, f ? "Revealed when the fight ends." : "")); }
         // teams (stat labels carry the pack's tooltips)
@@ -144,10 +137,8 @@ export default function createScreens(ctx) {
       }
     };
   };
-
-  // ================= RESULTS =================
+  
   const resCache = {};
-  // One card per fight. The summary is always visible; the event log and loss cards are built the first time it opens.
   function fightLog(f) {
     const w = f.final ? f.final.winner : "?";
     const d = h("details", { class: "fightlog" },

@@ -1,14 +1,14 @@
-// =====================================================================
-// modes/quiz/styles.js — the quiz's CSS, injected once from JS so styles/style.css stays untouched (zero merge surface).
-// Uses the existing theme tokens (--yellow, --dark, --sheet, --good, --bad, ...) and the existing .card / .btn / .row / .muted classes.
-// =====================================================================
 const CSS = `
 .qz-head{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between}
 .qz-head .qz-step{font:1.05rem var(--display);letter-spacing:.04em}
 .qz-stage{display:flex;flex-direction:column;gap:12px}
-.qz-plate{align-self:center;width:min(78vw,320px);aspect-ratio:1;background:var(--yellow);border:2px solid var(--dark);box-shadow:var(--offset);display:grid;place-items:center;border-radius:14px;padding:14px}
-.qz-plate.small{width:min(46vw,170px);padding:8px}
+.qz-plate{align-self:center;width:min(78vw,320px);aspect-ratio:1;background:var(--yellow);border:2px solid var(--dark);box-shadow:var(--offset);display:grid;place-items:center;border-radius:50%;padding:13%}
+.qz-plate.small{width:min(46vw,170px);padding:11%}
 .qz-sil{max-width:100%;max-height:100%;object-fit:contain;filter:url(#ink-ink)}
+.qz-plate.photo{padding:0;overflow:hidden}
+.qz-plate.photo.cutout{background:var(--yellow);padding:6%}
+.qz-plate.photo.cutout .qz-photo{object-fit:contain}
+.qz-photo{width:100%;height:100%;object-fit:cover;object-position:50% 35%;display:block}
 .qz-q{font:4rem var(--display);color:var(--dark)}
 .qz-emoji{font-size:5rem;line-height:1}
 .qz-prompt{font:1.35rem/1.25 var(--display);text-align:center;margin:0}

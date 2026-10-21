@@ -1,4 +1,3 @@
-// Local silhouette copies. CC0 / Public Domain silhouettes from phylopic.org ("remote" = original address).
 export default {
  "lion": {
   "url": "silhouettes/lion.svg",

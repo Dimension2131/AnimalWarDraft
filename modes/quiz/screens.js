@@ -1,10 +1,3 @@
-// =====================================================================
-// modes/quiz/screens.js — the quiz's own screens: `quiz` (one card per step) and `results`.
-// Clients only RENDER what the host wrote. Before the "ident" card of an animal the UI shows the silhouette only:
-// never the name, never the emoji (and never ctx.icon(), which falls back to the emoji and uses the name as alt text).
-// Other players' answers are not even fetched: a client watches only its own quiz/ans/{key}; everyone else's answers
-// reach the UI inside quiz/reveal/{a}, which the host writes when the results card appears.
-// =====================================================================
 import * as L from "./logic.js";
 import { ensureStyles } from "./styles.js";
 
@@ -15,7 +8,6 @@ export default function createScreens(ctx) {
   const pts = (p) => (p > 0 ? `+${p}` : p < 0 ? `−${-p}` : "0");
   const ptsCls = (p) => (p > 0 ? "qz-pos" : p < 0 ? "qz-neg" : "");
 
-  // ---------- state: watches only what a client may show ----------
   function watchQuiz() {
     const Q = { plan: null, cur: null, reveal: {}, ident: {}, final: null, mine: {}, local: {} };
     const subs = [];
@@ -25,7 +17,7 @@ export default function createScreens(ctx) {
     w("quiz/reveal", (v) => { Q.reveal = v || {}; });
     w("quiz/ident", (v) => { Q.ident = v || {}; });
     w("quiz/final", (v) => { Q.final = v; });
-    if (S.role === "player") w(`quiz/ans/${S.key}`, (v) => { Q.mine = v || {}; });   // OWN answers only
+    if (S.role === "player") w(`quiz/ans/${S.key}`, (v) => { Q.mine = v || {}; });
     return { Q, stop() { subs.forEach((u) => { try { u(); } catch (e) { /* ignore */ } }); } };
   }
   const canPlay = (Q) => S.role === "player" && !!Q.plan && Q.plan.keys.includes(S.key);
@@ -38,8 +30,6 @@ export default function createScreens(ctx) {
     try { await N.put(S.code, `quiz/ans/${S.key}/${L.sk(i)}`, L.clean(doc)); } catch (e) { toast(e.message); }
   }
 
-  // ---------- small widgets ----------
-  // The mystery silhouette. On a load error it shows "?" (never the emoji: that would give the answer away).
   const mystery = (id, small) => {
     const e = ent(id), q = () => h("span", { class: "qz-q" }, "?");
     return h("div", { class: "qz-plate" + (small ? " small" : "") }, e.silhouette ? h("img", { class: "qz-sil", src: e.silhouette, alt: "Mystery silhouette", onerror: (ev) => ev.target.replaceWith(q()) }) : q());
@@ -51,7 +41,6 @@ export default function createScreens(ctx) {
   const status = (el, text, ok) => { el.textContent = text; el.className = "qz-status" + (ok ? " ok" : ""); };
   const nextBtn = () => h("button", { class: "btn primary", type: "button", onclick: () => { const r = ctx.runner(); if (r && r.skip) r.skip().catch((e) => toast(e.message)); } }, "Next");
 
-  // ---------- step views: { el, sync(), tick() } ----------
   function viewChoice(Q, st, cur) {
     const P = Q.plan, an = P.animals[st.a], sp = st.t === "species", opts = (sp ? an.species : an.kind).options, i = cur.i;
     const T = timerBox(cur), stat = h("div", { class: "qz-status" });
@@ -97,13 +86,25 @@ export default function createScreens(ctx) {
     return { el, sync, tick() { T.tick(); const rem = cur.deadline - N.now(); if (canPlay(Q) && touched && !flushed && rem < 600 && rem > 0) { flushed = true; save(false); } sync(); } };
   }
 
+  const photo = (e, info, small) => {
+    const sm = small ? " small" : "", plate = h("div", { class: "qz-plate" + sm });
+    const fallback = () => { plate.className = "qz-plate" + sm; plate.replaceChildren(e.silhouette ? h("img", { class: "qz-sil", src: e.silhouette, alt: e.name }) : h("span", { class: "qz-q" }, e.name[0] || "?")); };
+    if (info && info.image) { plate.className = "qz-plate photo" + (info.cutout ? " cutout" : "") + sm; plate.append(h("img", { class: "qz-photo", src: info.image, alt: e.name, onerror: fallback })); }
+    else fallback();
+    return plate;
+  };
   function viewIdent(Q, st, cur) {
-    const an = Q.plan.animals[st.a], e = ent(an.id), T = timerBox(cur), kind = h("p", { class: "qz-hint" });
-    const el = h("div", { class: "qz-stage" }, h("p", { class: "qz-hint" }, "It was…"),
-      h("div", { class: "qz-plate" }, h("span", { class: "qz-emoji" }, e.emoji || "?")),
-      h("p", { class: "qz-big" }, e.name), kind, h("p", { class: "qz-hint" }, e.special || ""), T.el, h("div", { class: "row" }, nextBtn()));
+    const an = Q.plan.animals[st.a], e = ent(an.id), T = timerBox(cur), kind = h("p", { class: "qz-hint" }), credit = h("p", { class: "qz-src center" }), slot = h("div", {});
+    let shownImg;
+    const el = h("div", { class: "qz-stage" }, h("p", { class: "qz-hint" }, "It was…"), slot, h("p", { class: "qz-big" }, e.name), kind, credit, T.el, h("div", { class: "row" }, nextBtn()));
     const nb = el.querySelector(".btn");
-    return { el, sync() { const k = (Q.ident[L.ak(st.a)] || {}).kind; kind.textContent = k ? `Kind: ${k}` : ""; if (nb) nb.hidden = !isHost(); }, tick() { T.tick(); this.sync(); } };
+    return {
+      el, sync() {
+        const info = Q.ident[L.ak(st.a)] || {}, key = info.image || "";
+        if (shownImg !== key || shownImg === undefined) { shownImg = key; slot.replaceChildren(photo(e, info)); }
+        kind.textContent = info.kind ? `Kind: ${info.kind}` : ""; credit.textContent = info.credit || ""; if (nb) nb.hidden = !isHost();
+      }, tick() { T.tick(); this.sync(); }
+    };
   }
 
   function viewReveal(Q, st, cur) {
@@ -112,7 +113,7 @@ export default function createScreens(ctx) {
     const draw = (R) => {
       if (!R) { box.replaceChildren(h("p", { class: "muted center" }, "Loading results…")); return; }
       const e = ent(R.id), keys = P.keys, name = (k) => nameOf(k);
-      const parts = [h("h2", { class: "center" }, `${e.emoji || ""} ${e.name}`)];
+      const info = Q.ident[L.ak(st.a)] || {}, parts = [h("h2", { class: "center" }, e.name), photo(e, info, true), e.special ? h("p", { class: "qz-hint" }, e.special) : null];
       const ident = (title, rows, correctText, label) => h("div", { class: "card" }, h("h3", {}, title), h("p", { class: "qz-true" }, correctText),
         h("div", { class: "scroll" }, h("table", { class: "qz-tbl" }, h("thead", {}, h("tr", {}, h("th", {}, "Player"), h("th", {}, "Answer"), h("th", { class: "n" }, "Points"))),
           h("tbody", {}, keys.map((k) => { const r = rows[k] || { p: 0 }; return row([h("td", {}, name(k)), h("td", {}, label(r)), h("td", { class: "n " + ptsCls(r.p) }, pts(r.p))], k); })))));
@@ -133,7 +134,6 @@ export default function createScreens(ctx) {
     return { el, sync() { const R = Q.reveal[L.ak(st.a)], s = JSON.stringify(R || null); if (s !== sig) { sig = s; draw(R); } nb.hidden = !isHost(); }, tick() { T.tick(); this.sync(); } };
   }
 
-  // ---------- the quiz screen ----------
   function quizScreen() {
     const W = watchQuiz(), Q = W.Q;
     const head = h("div", { class: "qz-head" }), stage = h("div", {});
@@ -162,7 +162,6 @@ export default function createScreens(ctx) {
     };
   }
 
-  // ---------- results screen ----------
   function resultsScreen() {
     const W = watchQuiz(), Q = W.Q, body = h("div", { class: "qz-stage" }), actions = h("div", { class: "row" });
     screen(h("h1", {}, "Final standings"), body, actions);

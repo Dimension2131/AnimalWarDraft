@@ -1,9 +1,3 @@
-// =====================================================================
-// modes/quiz/mode.js — the "Silhouette Quiz" game mode: no draft, no fights.
-// Players see a black silhouette, name its KIND (4 options), optionally name the exact SPECIES (4 options, bonus),
-// then the animal is revealed and N numeric questions follow (speed, mass, ...). Closest answers score the most.
-// Works for any pack that has a `quiz` section in its manifest (docs/QUIZ_MODE.md). See docs/MODE_FORMAT.md for the mode contract.
-// =====================================================================
 import createScreens from "./screens.js";
 import { createHost } from "./host.js";
 import { DEFAULTS } from "./logic.js";
@@ -13,9 +7,9 @@ export default {
   title: "Silhouette Quiz",
   description: "Name the kind of animal from its black silhouette (bonus: the exact species), then guess its real-world numbers: speed, size, lifespan. The closest guesses win. No draft, no fights.",
   phases: ["lobby", "quiz", "results"],
+  noDraft: true,
   defaultSettings: { ...DEFAULTS },
 
-  // Lobby settings. api = { h, edit(fn), isHost() }. Keys are prefixed "quiz" because meta/settings is shared with other modes.
   settingsPanel({ h, edit }) {
     const num = (key, min, max) => h("input", { type: "number", min, max, onchange: (e) => edit((s) => { s[key] = Math.max(min, Math.min(max, Math.floor(+e.target.value) || min)); }) });
     const inAnimals = num("quizAnimals", 1, 30), inSecs = num("quizSeconds", 5, 120), inNum = num("quizNumeric", 0, 6), inPen = num("quizPenalty", 0, 400);
@@ -42,6 +36,6 @@ export default {
     };
   },
 
-  screens: createScreens,   // (ctx) => ({ quiz: () => screen, results: () => screen })
-  createHost                // (hostCtx) => ({ step, start, api: { playAgain, skip } })
+  screens: createScreens,
+  createHost
 };

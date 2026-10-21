@@ -1,8 +1,3 @@
-// =====================================================================
-// modes/classic/host.js — host logic of the "classic" mode: tournament, fights, appeals, judge, final results.
-// Moved here VERBATIM from js/host.js (only the dependency plumbing changed: it now gets a ctx from js/host.js).
-// Every state change is a guarded transaction, so a host handover can never double-apply anything.
-// =====================================================================
 import * as R from "../../js/rules.js";
 import * as N from "../../js/net.js";
 import { arr, hash, shuffleSeeded } from "../../js/util.js";
@@ -11,18 +6,13 @@ import { simulate } from "../../js/sim.js";
 
 export { digestOf };
 
-// ---------- AI hooks (STUBS: implemented later by a separate prompt) ----------
 export async function aiNarrate({ fightId, teams, events, autopsy }) { return null; }
 
-// Fingerprint of this build's entities + engine for one pack (see js/fingerprint.js; the Worker computes the same string).
 export function fingerprint(entityMap, pack) {
   const ids = pack ? pack.arenas.map((a) => a.id) : [...new Set([...entityMap.values()].flatMap((a) => Object.keys(a.arena_bonus || {})))];
   return fingerprintOf(entityMap, ids, pack && pack.fingerprintIds, simulate);
 }
 
-// ---------- facts-only appeal judge (Cloudflare Worker) ----------
-// The Worker re-simulates the fight itself from pack + ids + arena + seed, audits it in code, and asks the AI only to explain.
-// This function never decides anything: it returns the Worker's verdict, or { error } when the Worker cannot help.
 export async function aiJudgeAppeal({ appeal, fight, pack, entityMap }) {
   if (!R.AI_PROXY_URL) return { error: "no judge is configured" };
   const text = (v) => arr(v).map((c) => (c && c.text) || "").join(" ").trim();
@@ -41,7 +31,6 @@ export async function aiJudgeAppeal({ appeal, fight, pack, entityMap }) {
   finally { clearTimeout(timer); }
 }
 
-// ---------- tournament helpers (pure) ----------
 export function roundRobin(keys) {
   const k = keys.slice(); if (k.length % 2) k.push(null);
   const n = k.length, rounds = [];
@@ -53,7 +42,6 @@ export function roundRobin(keys) {
   return rounds;
 }
 
-// points / survivors / head-to-head / seeded random
 export function computeStandings(keys, tour) {
   const pts = {}, surv = {}, h2h = {};
   keys.forEach((k) => { pts[k] = 0; surv[k] = 0; h2h[k] = {}; });
@@ -83,20 +71,17 @@ function pairSwiss(tour, roundIdx) {
     const [b] = pool.splice(i, 1); matches.push({ a: b, bye: true });
   }
   while (pool.length) {
-    const a = pool.shift(); let j = pool.findIndex((x) => !played.has(a + "|" + x)); if (j < 0) j = 0; // fallback: rematch if unavoidable
+    const a = pool.shift(); let j = pool.findIndex((x) => !played.has(a + "|" + x)); if (j < 0) j = 0;
     matches.push({ a, b: pool.splice(j, 1)[0] });
   }
   return matches;
 }
 
-// advance the schedule to the next unplayed match; returns {tour, pick:{ri,mi}|null}; pick null + tour.done when over
 export function advance(tour) {
   tour = JSON.parse(JSON.stringify(tour));
-  // Firebase RTDB drops empty objects/arrays, so these come back undefined until first used
   tour.fights = tour.fights || {}; tour.labels = tour.labels || {}; tour.byes = tour.byes || [];
   for (let guard = 0; guard < 10; guard++) {
     const ms = arr(tour.rounds[tour.round]);
-    // register byes of the current round once
     ms.forEach((m) => { if (m.bye && !m.counted) { m.counted = true; tour.byes = arr(tour.byes).concat([m.a]); } });
     tour.rounds[tour.round] = ms;
     const mi = ms.findIndex((m) => !m.bye && !m.fightId);
@@ -128,17 +113,12 @@ export function makeTour(keys, lineups, seed) {
 }
 
 
-// =====================================================================
-// ctx (from js/host.js): { code, S, settings(), nm, an, log, map, pack, simulate }
-// returns { step(phase), begin(phase, {keys, lineups}), api: { nextFight } }
-// =====================================================================
 export function createHost(ctx) {
   const { code, S, settings, nm, an, log, map, pack } = ctx;
   const sim = {}; let aiBusy = {};
   const arenaIds = pack.arenas.map((a) => a.id);
   const simulate = ctx.simulate;
 
-  // lineup -> tournament: called by the shared lineup step with the final lineups. Returns truthy when the phase may advance.
   async function begin(phase, { keys, lineups }) {
     if (phase !== "tournament") return false;
     const tour = makeTour(keys, lineups, Math.floor(Math.random() * 4294967296));
@@ -184,7 +164,7 @@ export function createHost(ctx) {
     await tourTx((c) => {
       if (c.state !== "playing" || c.currentFight !== f.id) return undefined;
       const cf = c.fights[f.id];
-      if (cf.replayOf) { // replay result replaces the original
+      if (cf.replayOf) {
         const o = c.fights[cf.replayOf]; o.final = { winner: cf.result.winner, survivors: cf.result.survivors }; o.replayed = true;
         cf.final = o.final; cf.status = "done"; c.state = "awaitNext"; c.nextAt = N.now() + R.NEXT_FIGHT_IDLE_MS; c.currentFight = null; return c;
       }
@@ -231,14 +211,13 @@ export function createHost(ctx) {
       if (a.response === "decline" || t > a.deadline) return finishAppeal(fid, false, "declined");
       return;
     }
-    if (a.status === "ai") { // the judge call is in flight on this host; if the host vanished mid-call the deadline gets us unstuck
+    if (a.status === "ai") {
       if (t > (a.deadline || 0)) return afterCheck(fid, f, winnerKey, { error: "the judge did not answer in time" });
       return;
     }
     if (a.status === "resolved") return a.applied ? settle() : applyAppealOutcome(fid, f, a, s);
   }
 
-  // Stage 1 (whenever the Worker is configured): an independent fact check. Objective problems force a rematch whatever the mode.
   async function judge(fid, f, a, s, winnerKey) {
     if (R.AI_PROXY_URL) {
       const ok = await setAppeal(fid, (c) => (c.status === "rebuttal" ? { ...c, status: "ai", deadline: N.now() + R.AI_STAGE_MS } : undefined));
@@ -258,7 +237,7 @@ export function createHost(ctx) {
       return setAppeal(fid, (c) => (c.status === "ai" ? { ...c, status: "resolved", upheld: true, via: "judge", outcome: "rematch", forced: true, verdict } : undefined));
     return nextStage(fid, winnerKey, verdict);
   }
-  // Stage 2: votes when the mode and the crowd allow it, otherwise the winner decides whether to accept a rematch (declining keeps the win).
+
   function nextStage(fid, winnerKey, verdict) {
     const s = settings(), mode = s.judgeMode, f = ((S.tour || {}).fights || {})[fid] || {};
     const inFight = new Set([f.a, f.b]), voters = {};
@@ -274,7 +253,6 @@ export function createHost(ctx) {
 
   async function applyAppealOutcome(fid, f, a, s) {
     if (!a.upheld) { await setAppeal(fid, (c) => ({ ...c, applied: true })); return settle(); }
-    // rematch: replay with a new seed and the same lineups; the replay result replaces the original in standings
     const seed = Math.floor(Math.random() * 4294967296), startAt = N.now() + R.FIGHT_PRESTART_MS;
     await tourTx((c) => {
       if (c.state !== "appeal" || c.currentFight !== fid) return undefined;
