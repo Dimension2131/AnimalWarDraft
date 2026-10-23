@@ -6,6 +6,7 @@ import { filterPool } from "../../js/pack.js";
 export const POINTS = { kind: 200, species: 400 };
 export const IDENT_MS = 5000;
 export const REVEAL_MS = 14000;
+export const REVEAL_Q_MS = 8000;   // the short answer card shown right after every single question
 export const LEAD_MS = 2000;
 export const GRACE_MS = 1200;
 export const DEFAULTS = { quizAnimals: 8, quizSeconds: 20, quizNumeric: 3, quizSpecies: true, quizReveal: "each", quizPenalty: 100, quizLowConf: false };
@@ -29,11 +30,19 @@ export const sk = (i) => "s" + i;
 export const ak = (a) => "a" + a;
 
 
-export function scoreNumeric(guess, actual, lo, hi) {
+// Numeric scoring (stricter than before): ratio-based, symmetric (half and double are equally wrong).
+//   inside the published range, or within ~2% of the real value -> 1000
+//   then a smooth fall-off to 0 points at a factor of 2 (too high or too low)
+//   beyond a factor of 2 you LOSE points, up to `penalty` at a factor of 5 or more (penalty 0 = never negative)
+export function scoreNumeric(guess, actual, lo, hi, penalty = 0) {
   if (typeof guess !== "number" || !Number.isFinite(guess) || guess <= 0) return 0;
   if (typeof actual !== "number" || !Number.isFinite(actual) || actual <= 0) return 0;
   if (typeof lo === "number" && typeof hi === "number" && guess >= lo && guess <= hi) return 1000;
-  return Math.round(1000 * Math.max(0, 1 - Math.abs(Math.log10(guess / actual))));
+  const x = Math.abs(Math.log(guess / actual)) / Math.LN2;   // 1 = exactly a factor of 2 off
+  if (x <= 0.03) return 1000;
+  if (x < 1) return Math.round(1000 * Math.pow(1 - x, 1.3));
+  const loss = Math.round(Math.max(0, +penalty || 0) * Math.min(1, (x - 1) / 1.32));
+  return loss ? -loss : 0;
 }
 
 export function fmtNum(v) {
@@ -116,7 +125,7 @@ export function buildPlan({ pack, entities, facts, settings, keys, seed, gid }) 
     for (const def of Q.numeric || []) {
       const f = factFor(def, e, facts, s.lowConf); if (!f) continue;
       avail.push({
-        key: def.key, label: def.label, unit: def.unit, min: def.min, max: def.max,
+        key: def.key, label: def.label, unit: def.unit, min: def.min, max: def.max, scale: def.scale, integer: !!def.integer,
         prompt: fill(def.prompt, { a: article(e.name), name: e.name, medium: f.medium || def.medium || "move" }),
         note: def.hint || ""
       });
@@ -127,11 +136,11 @@ export function buildPlan({ pack, entities, facts, settings, keys, seed, gid }) 
 
   const steps = [];
   animals.forEach((an, a) => {
-    if (an.kind) steps.push({ t: "kind", a });
-    if (an.species) steps.push({ t: "species", a });
+    const ask = (st) => { const q = steps.length; steps.push(st); if (s.reveal === "each") steps.push({ t: "reveal", a, q }); };   // "each": an answer card right after EVERY question (q = index of the question it reveals)
+    if (an.kind) ask({ t: "kind", a });
+    if (an.species) ask({ t: "species", a });
     steps.push({ t: "ident", a });
-    an.num.forEach((_, n) => steps.push({ t: "num", a, n }));
-    if (s.reveal === "each") steps.push({ t: "reveal", a });
+    an.num.forEach((_, n) => ask({ t: "num", a, n }));
   });
   if (s.reveal === "end") animals.forEach((_, a) => steps.push({ t: "reveal", a }));
 
@@ -150,7 +159,7 @@ export function normPlan(p) {
   };
 }
 export const isQuestion = (st) => !!st && (st.t === "kind" || st.t === "species" || st.t === "num");
-export const stepMs = (P, st, first) => (isQuestion(st) ? P.settings.secs * 1000 + (first ? LEAD_MS : 0) : st.t === "ident" ? IDENT_MS : REVEAL_MS);
+export const stepMs = (P, st, first) => (isQuestion(st) ? P.settings.secs * 1000 + (first ? LEAD_MS : 0) : st.t === "ident" ? IDENT_MS : st.q !== undefined ? REVEAL_Q_MS : REVEAL_MS);
 
 export function gradeStep(P, i, row, truth, { gid, cutoff } = {}) {
   const st = P.steps[i], an = P.animals[st.a], out = {};
@@ -165,7 +174,7 @@ export function gradeStep(P, i, row, truth, { gid, cutoff } = {}) {
       if (typeof v === "string" && an.species.options.includes(v)) p = v === an.id ? P.settings.points.species : -P.settings.penalty;   // no v = skipped = 0
     } else if (st.t === "num") {
       const q = an.num[st.n], f = truth.fact(an.id, q.key);
-      p = f ? scoreNumeric(v, f.v, f.lo, f.hi) : 0;
+      p = f ? scoreNumeric(v, f.v, f.lo, f.hi, P.settings.penalty) : 0;
     }
     out[k] = v === undefined ? { p } : { v, p };
   }
@@ -185,10 +194,18 @@ export function totalsThrough(P, scores, lastAnimal) {
 }
 export const rankKeys = (P, totals) => P.keys.slice().sort((x, y) => (totals[y] - totals[x]) || (P.keys.indexOf(x) - P.keys.indexOf(y)));
 
-export function buildReveal(P, a, scores, truth) {
-  const an = P.animals[a], out = { a, id: an.id, kind: null, species: null, nums: [] };
+export function totalsThroughStep(P, scores, last) {
+  const t = Object.fromEntries(P.keys.map((k) => [k, 0]));
+  P.steps.forEach((st, i) => { if (i <= last && isQuestion(st)) { const r = sc(scores, i); for (const k of P.keys) t[k] += (r[k] && r[k].p) || 0; } });
+  return t;
+}
+export const revealKey = (st) => (st && st.q !== undefined ? "q" + st.q : ak(st.a));
+
+export function buildReveal(P, a, scores, truth, qi) {
+  const an = P.animals[a], one = typeof qi === "number", out = { a, id: an.id, kind: null, species: null, nums: [] };
+  if (one) out.i = qi;
   P.steps.forEach((st, i) => {
-    if (st.a !== a || !isQuestion(st)) return;
+    if (st.a !== a || !isQuestion(st) || (one && i !== qi)) return;
     const r = sc(scores, i);
     if (st.t === "kind") out.kind = { correct: truth.kind(an.id), rows: r };
     else if (st.t === "species") out.species = { correct: an.id, rows: r };
@@ -197,8 +214,8 @@ export function buildReveal(P, a, scores, truth) {
       out.nums.push({ key: q.key, label: q.label, unit: q.unit, prompt: q.prompt, actual: f.v, lo: f.lo, hi: f.hi, src: f.src || "", note: f.note || "", rows: r });
     }
   });
-  out.gain = animalGains(P, scores, a);
-  out.board = totalsThrough(P, scores, a);
+  if (one) { const r = sc(scores, qi); out.gain = Object.fromEntries(P.keys.map((k) => [k, (r[k] && r[k].p) || 0])); out.board = totalsThroughStep(P, scores, qi); }
+  else { out.gain = animalGains(P, scores, a); out.board = totalsThrough(P, scores, a); }
   out.order = rankKeys(P, out.board);
   return clean(out);
 }

@@ -175,12 +175,16 @@ export function applyBid(a, key, amount, t) {
   a.top = { key, amt: amount };
   return a;
 }
+const t0 = () => now();
 export function applySkip(a, key) {
   if (!a || a.resolved) return undefined;
   if (a.status === "bidding") {
     if (!(a.eligible && a.eligible[key])) return undefined;
     if (a.top && a.top.key === key) return undefined;
-    a.skips = a.skips || {}; a.skips[key] = true; return a;
+    a.skips = a.skips || {}; a.skips[key] = true;
+    const left = Object.keys(a.participants || {}).filter((k) => !a.skips[k]);   // everyone else skipped: go straight to the free claim, no wait for the host tick
+    if (!a.top && left.length === 1) { a.status = "claim"; a.claim = { key: left[0], deadline: t0() + R.CLAIM_WINDOW_MS }; }
+    return a;
   }
   if (a.status === "claim" && a.claim && a.claim.key === key) { a.claim = { ...a.claim, declined: true }; return a; }
   return undefined;

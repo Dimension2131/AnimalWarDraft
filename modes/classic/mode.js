@@ -5,6 +5,7 @@ export default {
   id: "classic",
   title: "Classic",
   description: "Bid on entities in a live auction, set your lineup, then play a tournament of fights. Losers may appeal for a rematch.",
+  supports: (pack) => !pack.engine,
   phases: ["lobby", "draft", "lineup", "tournament", "results"],
   defaultSettings: { spectatorVoting: true, judgeMode: "auto" },
   settingsPanel({ h, edit }) {

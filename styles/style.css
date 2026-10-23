@@ -2557,3 +2557,43 @@ textarea {
   border-radius: 12px;
   gap: 10px
 }
+/* ================= game version selector + title glitch ================= */
+.vcard{display:grid;gap:8px}
+.vsel{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;width:100%}
+.vtab{display:grid;gap:2px;justify-items:start;text-align:left;padding:12px;border:2px solid var(--edge-dim);background:var(--field);color:var(--text);cursor:pointer;font:inherit;transition:transform .12s,border-color .12s,box-shadow .12s}
+.vtab b{font:1.1rem var(--display)}
+.vtab small{color:var(--muted);font-size:.74rem;line-height:1.25}
+.vtab .vicon{font-size:1.6rem;line-height:1}
+.vtab.on{border-color:var(--yellow);background:var(--sheet2);box-shadow:3px 3px 0 var(--pink);transform:translate(-1px,-1px)}
+.create-opts{display:grid;gap:8px}
+.wordmark span{position:relative}
+.wordmark.glitching{animation:wm-jit .14s steps(2) infinite}
+.wordmark.glitching span{text-shadow:-4px 0 #00e5ff,4px 0 var(--pink)}
+.wordmark.glitching span::before,.wordmark.glitching span::after{content:attr(data-t);position:absolute;left:0;top:0;width:100%;overflow:hidden;background:transparent}
+.wordmark.glitching span::before{color:#00e5ff;clip-path:inset(0 0 62% 0);transform:translateX(-7px);animation:wm-slice .31s steps(5) infinite}
+.wordmark.glitching span::after{color:var(--pink);clip-path:inset(58% 0 0 0);transform:translateX(7px);animation:wm-slice .23s steps(4) infinite reverse}
+@keyframes wm-jit{0%{transform:translate(0,0) skewX(0)}25%{transform:translate(-4px,1px) skewX(-7deg)}50%{transform:translate(5px,-2px) skewX(6deg)}75%{transform:translate(-2px,2px) skewX(0)}100%{transform:translate(0,0)}}
+@keyframes wm-slice{0%{clip-path:inset(5% 0 80% 0)}20%{clip-path:inset(40% 0 30% 0)}40%{clip-path:inset(70% 0 5% 0)}60%{clip-path:inset(15% 0 60% 0)}80%{clip-path:inset(55% 0 20% 0)}100%{clip-path:inset(0 0 90% 0)}}
+body.flash::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:50;background:repeating-linear-gradient(0deg,rgba(255,255,255,.16) 0 2px,transparent 2px 5px);animation:flash .45s steps(6) forwards}
+@keyframes flash{0%{opacity:1}100%{opacity:0}}
+@media (prefers-reduced-motion:reduce){.wordmark.glitching,.wordmark.glitching span::before,.wordmark.glitching span::after,body.flash::after{animation:none}}
+
+/* ================= Pokémon draft card + type colours ================= */
+.tpill{display:inline-block;padding:1px 9px;border-radius:999px;border:1.5px solid var(--dark);font-size:.74rem;font-weight:800;text-transform:capitalize}
+.type-normal{background:#c3c3a8;color:#070c0b}.type-fire{background:#ff9a55;color:#070c0b}.type-water{background:#6fa8ff;color:#070c0b}.type-electric{background:#ffe04a;color:#070c0b}.type-grass{background:#7fdc6a;color:#070c0b}.type-ice{background:#9ae8ee;color:#070c0b}
+.type-fighting{background:#e0645c;color:#070c0b}.type-poison{background:#c27ad8;color:#070c0b}.type-ground{background:#e2c06a;color:#070c0b}.type-flying{background:#b4a8f5;color:#070c0b}.type-psychic{background:#ff7fa8;color:#070c0b}.type-bug{background:#b5d84a;color:#070c0b}
+.type-rock{background:#c9b26a;color:#070c0b}.type-ghost{background:#9c84c4;color:#070c0b}.type-dragon{background:#8a6cff;color:#070c0b}.type-dark{background:#9a8274;color:#070c0b}.type-steel{background:#b9c2d4;color:#070c0b}.type-fairy{background:#f5a8d8;color:#070c0b}
+.chip.tchip.on{color:#070c0b;border-color:var(--dark)}
+.chip.tchip:not(.on){opacity:.55}
+.sil.color,.medal .sil.color{filter:none;image-rendering:pixelated}
+.acard.pk .plate-head{display:flex;gap:14px;align-items:center;height:auto;min-height:0}
+.acard.pk .pk-cplate{width:104px;height:104px;border-radius:50%;background:var(--yellow);border:2px solid var(--dark);box-shadow:3px 3px 0 var(--pink);display:grid;place-items:center;flex:none;overflow:hidden;position:relative}
+.acard.pk .pk-art{width:76%;height:76%;object-fit:contain;display:block}   /* shrunk so the whole Pokémon sits inside the circle */
+.acard.pk .aname{font-size:1.15rem;line-height:1.15;overflow-wrap:anywhere}
+.acard.pk .tagrow{margin-top:4px}
+.acard.pk .meta{display:flex;flex-wrap:wrap;gap:5px}
+.acard.pk .stat{grid-template-columns:62px minmax(0,1fr) 30px}
+.s-hp{--c:#ff5d73}.s-atk{--c:#ff9a3d}.s-def{--c:var(--blue)}.s-spa{--c:#b987ff}.s-spd{--c:var(--teal)}.s-spe{--c:var(--yellow)}.s-bst{--c:#e6e9dc}
+.pk-abil{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-top:6px}
+@media (max-width:520px){.acard.pk .pk-cplate{width:84px;height:84px}}
+.qz-opt{text-transform:capitalize}

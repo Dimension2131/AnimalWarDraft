@@ -74,15 +74,19 @@ export function createHost(ctx) {
     const doc = L.clean({ closedAt: N.now(), r });
     await N.tx(code, `quiz/scores/${L.sk(i)}`, (c) => (c ? undefined : doc));
   }
+  async function writeIdent(P, a) {
+    const truth = await getTruth();
+    const id = P.animals[a].id, ee = map.get(id), im = ((await loadImages()) || {})[id] || (ee && ee.image ? { url: ee.image, cutout: true } : null);
+    await N.put(code, `quiz/ident/${L.ak(a)}`, L.clean({ kind: truth.kind(id) || "", image: im && im.url ? im.url : undefined, cutout: im && im.url && im.cutout ? true : undefined, credit: im && im.credit ? im.credit : undefined }));
+  }
   async function writeInfo(P, st) {
     const truth = await getTruth();
-    if (st.t === "ident") {
-      const id = P.animals[st.a].id, im = ((await loadImages()) || {})[id];
-      await N.put(code, `quiz/ident/${L.ak(st.a)}`, L.clean({ kind: truth.kind(id) || "", image: im && im.url ? im.url : undefined, cutout: im && im.url && im.cutout ? true : undefined, credit: im && im.credit ? im.credit : undefined }));
-    }
+    if (st.t === "ident") await writeIdent(P, st.a);
     else if (st.t === "reveal") {
       const scores = (await N.getVal(code, "quiz/scores")) || {};
-      await N.put(code, `quiz/reveal/${L.ak(st.a)}`, L.buildReveal(P, st.a, scores, truth));
+      const qs = st.q !== undefined ? P.steps[st.q] : null;
+      if (qs && qs.t === "species") await writeIdent(P, st.a);   // the answer card of the species question shows the real picture, which comes before the ident card
+      await N.put(code, `quiz/reveal/${L.revealKey(st)}`, L.buildReveal(P, st.a, scores, truth, st.q));
     }
   }
   async function advance(P, cur) {

@@ -9,14 +9,16 @@ const $ = (s, r = document) => r.querySelector(s);
 const arr = (v) => (Array.isArray(v) ? v : v ? Object.values(v) : []);
 const icon = (a) => {
   const em = () => h("span", { class: "emoji" }, a.emoji);
-  return a.silhouette ? h("img", { class: "sil", src: a.silhouette, alt: a.name || "", loading: "lazy", onerror: (e) => e.target.replaceWith(em()) }) : em();
+  const src = a.iconUrl || a.silhouette;   // iconUrl = small colour sprite (Pokémon); silhouette = ink-filtered shape (animals)
+  return src ? h("img", { class: "sil" + (a.iconUrl ? " color" : ""), src, alt: a.name || "", loading: "lazy", onerror: (e) => { if (a.iconAlt && !e.target.dataset.fb) { e.target.dataset.fb = "1"; e.target.src = a.iconAlt; } else e.target.replaceWith(em()); } }) : em();
 };
 function hero(pack, list) {
-  const pool = list.filter((a) => a.silhouette), picks = [], inks = ["blue", "pink", "teal"];
+  const want = new Set(pack.heroIds || []);
+  const pool = list.filter((a) => a.silhouette && (!want.size || want.has(a.id))), picks = [], inks = ["blue", "pink", "teal"];
   while (pool.length && picks.length < 3) picks.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
   return h("div", { class: "hero" },
     h("div", { class: "hero-art", "aria-hidden": "true" }, picks.map((a, i) => h("img", { class: `hero-sil ink-${inks[i]} hs${i}`, src: a.silhouette, alt: "", onerror: (e) => e.target.remove() }))),
-    h("h1", { class: "wordmark" }, pack.title.split(/\s+/).map((w) => h("span", {}, w))),
+    h("h1", { class: "wordmark" }, pack.title.split(/\s+/).map((w) => h("span", { "data-t": w }, w))),
     h("p", { class: "tagline" }, pack.tagline));
 }
 function h(tag, attrs, ...kids) {
@@ -33,14 +35,32 @@ function h(tag, attrs, ...kids) {
 }
 const root = $("#app");
 const warmed = new Set();
-const warm = (list) => setTimeout(() => { for (const a of list) if (a.silhouette && !warmed.has(a.silhouette)) { warmed.add(a.silhouette); new Image().src = a.silhouette; } }, 0);
+const warm = (list) => list.length > 400 ? 0 : setTimeout(() => { for (const a of list) if (a.silhouette && !warmed.has(a.silhouette)) { warmed.add(a.silhouette); new Image().src = a.silhouette; } }, 0);
 const secs = (ms) => Math.max(0, Math.ceil(ms / 1000));
 let toastT;
 function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("show"), 3500); }
 
+// Home title glitch: scramble the words that change, with an RGB-split jitter. Skipped for reduced-motion users.
+function glitchTo(wordmark, title) {
+  const words = title.split(/\s+/), spans = [...wordmark.children];
+  const reduce = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const set = (sp, t) => { sp.textContent = t; sp.setAttribute("data-t", t); };
+  words.forEach((w, i) => { if (!spans[i]) wordmark.append(h("span", { "data-t": w }, w)); });
+  while (wordmark.children.length > words.length) wordmark.lastChild.remove();
+  const sp = [...wordmark.children], diff = words.map((w, i) => sp[i].textContent !== w);
+  if (reduce || !diff.some(Boolean)) { sp.forEach((el, i) => set(el, words[i])); return; }
+  const GL = "ABCDEFGHIJKLMNOPQRSTUVWXYZ#%&@$0123456789", frames = 16; let f = 0;
+  wordmark.classList.add("glitching");
+  const tick = setInterval(() => {
+    f++;
+    sp.forEach((el, i) => { if (!diff[i]) return; const w = words[i], keep = Math.floor((f / frames) * w.length); set(el, w.slice(0, keep) + Array.from({ length: w.length - keep }, () => GL[Math.floor(Math.random() * GL.length)]).join("")); });
+    if (f >= frames) { clearInterval(tick); sp.forEach((el, i) => set(el, words[i])); setTimeout(() => wordmark.classList.remove("glitching"), 140); }
+  }, 55);
+}
+
 async function pageValidate() {
   const { pack, list: ANIMALS } = await loadPackData(new URLSearchParams(location.search).get("pack"));
-  const v = validateAnimals(ANIMALS, pack);
+  const v = pack.engine ? ANIMALS.flatMap((e) => (pack.validate ? pack.validate(e) : []).map((x) => `${e.id}: ${x}`)) : validateAnimals(ANIMALS, pack);
   root.replaceChildren(h("section", { class: "screen" }, h("h1", {}, "Validate animals"),
     h("p", {}, `${ANIMALS.length} animals loaded, ${v.length} violation(s).`),
     v.length ? h("ul", { class: "viol" }, v.map((x) => h("li", {}, x))) : h("p", { class: "ok" }, "All animals are valid.")));
@@ -77,7 +97,7 @@ async function main() {
     ctxLoading = k;
     try {
       const [pk, md] = k.split("|"), d = await loadPackData(pk);
-      PK = d.pack; ENT = { list: d.list, map: d.map }; MD = await M.getMode(md); warm(d.list); P.applyPack(PK); ctxKey = k;
+      PK = d.pack; ENT = { list: d.list, map: d.map }; MD = await M.getMode(md); if (!M.supports(MD, PK)) MD = M.modesFor(MODES, PK)[0] || MD; warm(d.list); P.applyPack(PK); ctxKey = k;
     } catch (e) { toast("Could not load this room's category or mode: " + e.message); }
     ctxLoading = ""; schedule();
   }
@@ -201,7 +221,19 @@ async function main() {
   };
   const traitPills = (a, hide) => [traitPill("up", a, hide), traitPill("down", a, hide)].filter(Boolean);
 
+  function pokemonCard(a, compact, note) {
+    const stats = P.engineStats(PK), max = PK.statMax || 100, cap = (x) => x.charAt(0).toUpperCase() + x.slice(1);
+    if (!a) return h("div", { class: "acard ph" }, h("div", { class: "plate-head" }, h("div", { class: "medal" }, h("span", { class: "qmark" }, "?")), h("div", { class: "grow" }, h("strong", { class: "aname" }, "???"), h("div", { class: "special" }, note || "Next Pokémon…"))));
+    const art = h("img", { class: "pk-art", src: a.image, alt: a.name, loading: "lazy", onerror: (e) => { if (a.imageAlt && !e.target.dataset.fb) { e.target.dataset.fb = "1"; e.target.src = a.imageAlt; } else e.target.replaceWith(h("span", { class: "emoji" }, a.emoji)); } });
+    return h("div", { class: "acard pk" },
+      h("div", { class: "plate-head" }, h("div", { class: "pk-cplate" }, art), h("div", { class: "grow" }, h("strong", { class: "aname" }, a.name), h("div", { class: "special" }, a.special || ""),
+        h("div", { class: "row wrap tagrow" }, a.types.map((t) => h("span", { class: "tpill type-" + t }, cap(t))), a.cls !== "Regular" ? h("span", { class: "pill" }, a.cls) : null))),
+      h("div", { class: "row meta" }, (PK.cardChips ? PK.cardChips(a) : []).map((x) => h("span", { class: "chip-s" }, x))),
+      compact ? null : h("div", { class: "stats" }, stats.map((st) => h("div", { class: "stat s-" + st.key }, tip(h("span", {}, st.label), st.description), h("div", { class: "sbar" }, h("i", { style: `width:${Math.min(100, (a[st.key] / max) * 100)}%` })), h("b", {}, a[st.key]))), h("div", { class: "stat s-bst" }, h("span", {}, "Total"), h("div", { class: "sbar" }, h("i", { style: `width:${Math.min(100, (a.bst / 720) * 100)}%` })), h("b", {}, a.bst))),
+      compact ? null : h("div", { class: "pk-abil" }, h("span", { class: "muted small" }, "Abilities: "), a.abilities.map((x) => h("span", { class: "chip-s" }, cap(x.id.replace(/-/g, " ")) + (x.hidden ? " (hidden)" : ""))), h("span", { class: "chip-s" }, `${a.nmoves} moves`)));
+  }
   function animalCard(a, compact, note, hideTraits) {
+    if (PK.engine === "pokemon") return pokemonCard(a, compact, note);
     const stats = P.engineStats(PK);
     const zone = (statVals, tileVals, ta) => compact ? null : h("div", { class: "statzone" },
       h("div", { class: "stats" }, stats.map((st) => { const s = st.key; return h("div", { class: "stat s-" + s }, tip(h("span", {}, st.label), st.description), h("div", { class: "sbar" }, h("i", { style: `width:${statVals ? statVals[s] : 0}%` })), h("b", {}, statVals ? statVals[s] : "?")); }), toughRow(ta)),
@@ -253,10 +285,32 @@ async function main() {
     if (N.configured) { pubUnsub = N.watchPublicRooms((idx) => { pubIdx = idx; renderPub(); }); pubTimer = setInterval(renderPub, 15000); }
     let heroEl = hero(PK, ENT.list);
     const visSel = h("select", { title: "Private rooms need the code. Public rooms are listed on this page while they are still in the lobby." }, h("option", { value: "private" }, "Private (code only)"), h("option", { value: "public" }, "Public (listed)"));
-    const packSel = h("select", { onchange: async (e) => { homePack = e.target.value; const d = await loadPackData(homePack); P.applyPack(d.pack); PK = d.pack; ENT = { list: d.list, map: d.map }; warm(d.list); const n = hero(d.pack, d.list); heroEl.replaceWith(n); heroEl = n; } }, PACKS.map((p) => h("option", { value: p.id, selected: p.id === homePack }, p.name)));
+    const modeSel = h("select", { onchange: () => drawOpts() }), optBox = h("div", { class: "create-opts" }), optSel = {};
+    const modeList = () => M.modesFor(MODES, PK);
+    const drawModes = () => { modeSel.replaceChildren(...modeList().map((m) => h("option", { value: m.id }, M.titleOf(m, PK)))); drawOpts(); };
+    function drawOpts() {   // per-mode options chosen when the room is created (Pokémon war: auto or manual battles)
+      const md = modeList().find((m) => m.id === modeSel.value) || modeList()[0]; optBox.replaceChildren(); for (const k of Object.keys(optSel)) delete optSel[k];
+      for (const o of (md && md.createOptions) || []) { const sel = h("select", {}, o.options.map((x) => h("option", { value: x.v, selected: x.v === o.default }, x.l))); optSel[o.id] = sel; optBox.append(h("label", {}, o.label, sel)); }
+      modeInfo.textContent = (md && md.description) || "";
+    }
+    const modeInfo = h("p", { class: "muted small" });
+    const tabs = h("div", { class: "vsel", role: "tablist", "aria-label": "Game version" }, PACKS.map((p) => h("button", { type: "button", role: "tab", class: "vtab" + (p.id === homePack ? " on" : ""), "data-pack": p.id, "aria-selected": String(p.id === homePack),
+      onclick: async () => {
+        if (p.id === homePack) return; homePack = p.id;
+        tabs.querySelectorAll(".vtab").forEach((t) => { const on = t.dataset.pack === p.id; t.classList.toggle("on", on); t.setAttribute("aria-selected", String(on)); });
+        const d = await loadPackData(homePack); document.body.classList.add("flash"); setTimeout(() => document.body.classList.remove("flash"), 450);
+        P.applyPack(d.pack); PK = d.pack; ENT = { list: d.list, map: d.map }; warm(d.list); document.title = d.pack.title;
+        glitchTo(heroEl.querySelector(".wordmark"), d.pack.title);
+        const n = hero(d.pack, d.list); heroEl.querySelector(".hero-art").replaceWith(n.querySelector(".hero-art")); heroEl.querySelector(".tagline").textContent = d.pack.tagline; drawModes();
+      } }, h("span", { class: "vicon" }, p.icon || "🎮"), h("b", {}, p.name), h("small", {}, p.blurb || ""))));
+    drawModes();
     screen(heroEl,
       h("div", { class: "card" }, h("label", {}, "Name"), nameIn, h("p", { class: "muted small" }, "The same name on another device takes over your seat.")),
-      h("div", { class: "card" }, PACKS.length > 1 ? [h("label", {}, "Category", packSel)] : null, h("label", {}, "Visibility", visSel), h("button", { class: "btn primary big", onclick: go(async () => { const n = need(); const pk = await P.getPack(homePack), md = MODES[0]; const code = await N.createRoom(n, JSON.parse(JSON.stringify({ ...R.DEFAULT_SETTINGS, ...(md.defaultSettings || {}), filters: P.defaultFilters(pk) })), { pack: pk.id, mode: md.id, visibility: visSel.value }); await enter(code, "player", n); }) }, "Create room")),
+      PACKS.length > 1 ? h("div", { class: "card vcard" }, h("label", {}, "Game"), tabs) : null,
+      h("div", { class: "card" }, h("label", {}, "Mode", modeSel), modeInfo, optBox, h("label", {}, "Visibility", visSel), h("button", { class: "btn primary big", onclick: go(async () => {
+        const n = need(), pk = await P.getPack(homePack), md = modeList().find((m) => m.id === modeSel.value) || modeList()[0];
+        const extra = {}; for (const [k, el] of Object.entries(optSel)) extra[k] = el.value;
+        const code = await N.createRoom(n, JSON.parse(JSON.stringify({ ...R.DEFAULT_SETTINGS, ...(md.defaultSettings || {}), ...extra, filters: P.defaultFilters(pk) })), { pack: pk.id, mode: md.id, visibility: visSel.value }); await enter(code, "player", n); }) }, "Create room")),
       h("div", { class: "card" }, h("label", {}, "Room code"), codeIn, h("div", { class: "row" },
         h("button", { class: "btn primary big", onclick: go(async () => { const n = need(), c = N.normCode(codeIn.value); if (c.length !== 4) throw new Error("Enter the 4-letter code"); await enter(c, "player", n); }) }, "Join"),
         h("button", { class: "btn big", onclick: go(async () => { const n = need(), c = N.normCode(codeIn.value); if (c.length !== 4) throw new Error("Enter the 4-letter code"); await enter(c, "spectator", n); }) }, "Spectate"))),
@@ -287,14 +341,14 @@ async function main() {
     const push = () => { clearTimeout(pending); pending = setTimeout(async () => { pending = null; try { await N.put(S.code, "meta/settings", L); } catch (e) { toast(e.message); } }, 250); };
     const edit = (fn) => { if (!isHost()) return; fn(L); push(); refresh(); };
     const num = (key, min, max) => h("input", { type: "number", min, max, onchange: (e) => edit((s) => { s[key] = Math.max(min, Math.min(max, Math.floor(+e.target.value) || min)); }) });
-    const inBal = num("startBalance", 10, 100000), inRos = num("rosterSize", R.ROSTER_MIN, R.ROSTER_MAX), inSec = num("auctionSeconds", 5, 120);
+    const inBal = num("startBalance", 10, 100000), inRos = num("rosterSize", R.ROSTER_MIN, R.ROSTER_MAX), inSec = num("auctionSeconds", 5, 120), inStall = num("stallLimit", R.STALL_MIN, R.STALL_MAX);
     const cbMystery = h("input", { type: "checkbox", onchange: (e) => edit((s) => { s.mysteryTraits = e.target.checked; }) });
-    const selMode = h("select", { onchange: (e) => { if (isHost()) N.put(S.code, "meta/mode", e.target.value).catch((er) => toast(er.message)); } }, MODES.map((m) => h("option", { value: m.id }, m.title)));
+    const selMode = h("select", { onchange: (e) => { if (isHost()) N.put(S.code, "meta/mode", e.target.value).catch((er) => toast(er.message)); } }, M.modesFor(MODES, PK).map((m) => h("option", { value: m.id }, M.titleOf(m, PK))));
     const modeDesc = h("p", { class: "muted small" }, MD.description || "");
     const modePanel = MD.settingsPanel ? MD.settingsPanel({ h, edit, isHost, pack: PK }) : { nodes: [], refresh() {} };
     const buildFilter = (d) => {
       if (d.type === "chips") {
-        const row = h("div", { class: "row wrap" }, d.options.map((x) => h("button", { type: "button", class: "chip", "aria-pressed": "false", "data-v": x, onclick: () => edit((s) => { const a = new Set(s.filters[d.id]); a.has(x) ? a.delete(x) : a.add(x); s.filters[d.id] = [...a]; }) }, x)));
+        const row = h("div", { class: "row wrap" }, d.options.map((x) => h("button", { type: "button", class: "chip" + (d.typeChips ? " tchip type-" + x : ""), "aria-pressed": "false", "data-v": x, onclick: () => edit((s) => { const a = new Set(s.filters[d.id]); a.has(x) ? a.delete(x) : a.add(x); s.filters[d.id] = [...a]; }) }, d.format ? d.format(x) : x)));
         return { nodes: [h("label", {}, d.label), row], refresh(f) { row.querySelectorAll(".chip").forEach((c) => { const on = f[d.id].includes(c.dataset.v); c.classList.toggle("on", on); c.setAttribute("aria-pressed", String(on)); }); } };
       }
       if (d.type === "range") {
@@ -331,7 +385,7 @@ async function main() {
     const drawEx = () => widgets.forEach((w) => w.draw && w.draw());
     function refresh() {
       const host = isHost(), f = L.filters;
-      for (const [el, v] of [[inBal, L.startBalance], [inRos, L.rosterSize], [inSec, L.auctionSeconds]]) { if (document.activeElement !== el) el.value = v; el.disabled = !host; }
+      for (const [el, v] of [[inBal, L.startBalance], [inRos, L.rosterSize], [inSec, L.auctionSeconds], [inStall, L.stallLimit ?? R.STALL_LIMIT]]) { if (document.activeElement !== el) el.value = v; el.disabled = !host; }
       selMode.value = MD.id; selMode.disabled = !host;
       cbMystery.checked = !!L.mysteryTraits; cbMystery.disabled = !host;
       modePanel.refresh(L, host);
@@ -340,7 +394,7 @@ async function main() {
       poolInfo.className = "poolinfo " + (ok ? "ok" : "bad"); poolInfo.textContent = MD.noDraft ? `Pool: ${n} ${PK.nouns.plural}` : `Pool: ${n} ${PK.nouns.plural} (need at least ${need} for ${Math.max(np, 2)} players × ${L.rosterSize} + ${R.POOL_MARGIN})`;
       startBtn.hidden = !host; startBtn.disabled = !(host && runner && ok && np >= 2);
     }
-    const draftBox = h("div", {}, h("div", { class: "grid2" }, h("label", {}, "Starting balance ($)", inBal), h("label", {}, "Roster size (3-8)", inRos), h("label", {}, "Auction seconds", inSec)),
+    const draftBox = h("div", {}, h("div", { class: "grid2" }, h("label", {}, "Starting balance ($)", inBal), h("label", {}, "Roster size (3-8)", inRos), h("label", {}, "Auction seconds", inSec), h("label", {}, "Unsold lots in a row before a free lot", inStall)),
       PK.traitsFile ? h("label", { class: "row" }, cbMystery, " Mystery traits: strength and weakness show as ??? while an animal is up for auction") : null);
     draftBox.hidden = !!MD.noDraft;
     screen(h("div", { class: "card center" }, h("div", { class: "muted" }, "Room code"), h("div", { class: "bigcode" }, S.code), h("div", { class: "muted small" }, "Friends join with this code (max 6 players, 10 connections).")),
@@ -391,7 +445,7 @@ async function main() {
         const L = S.ledger || {}, G = S.game || {}, st = settings(), A = S.auction, me = S.key, bal = L.balances || {}, ros = L.rosters || {};
         const active = A && !A.resolved && A.id === (L.drawIndex || 0), a = A && ENT.map.get(A.animalId);
         if (A && A.id !== lastId) { lastId = A.id; barMax = Math.max(1000, A.deadline - N.now()); bidTouched = false; }
-        topInfo.replaceChildren(h("div", { class: "lotbar" }, h("span", { class: "lotno" }, `Lot ${Math.min((L.drawIndex || 0) + 1, arr(G.pool).length)} of ${arr(G.pool).length}`), L.stall ? h("span", { class: "pill" }, `${L.stall} of ${R.STALL_LIMIT} unsold in a row`) : null),
+        topInfo.replaceChildren(h("div", { class: "lotbar" }, h("span", { class: "lotno" }, `Lot ${Math.min((L.drawIndex || 0) + 1, arr(G.pool).length)} of ${arr(G.pool).length}`), L.stall ? h("span", { class: "pill" }, `${L.stall} of ${settings().stallLimit ?? R.STALL_LIMIT} unsold in a row`) : null),
           S.role === "player" ? h("div", { class: "purse" }, h("b", {}, `$${bal[me] ?? 0}`), h("span", { class: "muted" }, `left, roster ${arr(ros[me]).length} of ${st.rosterSize}`)) : h("div", { class: "pill" }, "spectating"));
         const sold = A && A.resolved && A.outcome && A.outcome.winner ? ENT.map.get(A.outcome.animalId) : null;   // mystery traits: the bought animal is shown once with its traits revealed
         cardBox.replaceChildren(active && a ? animalCard(a, false, null, !!st.mysteryTraits) : sold && st.mysteryTraits ? animalCard(sold, false, null, false) : animalCard(null, false, A && A.resolved && A.outcome ? "Resolved…" : `Next ${PK.nouns.singular}…`));

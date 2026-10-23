@@ -14,3 +14,8 @@ export async function listModes() {
 export async function getMode(id) { const all = await listModes(); return all.find((m) => m.id === id) || all[0]; }
 
 export const nextPhase = (mode, phase) => { const i = mode.phases.indexOf(phase); return i >= 0 && i + 1 < mode.phases.length ? mode.phases[i + 1] : null; };
+
+// A mode may declare which packs it works with: supports(pack) -> boolean (default: every pack). titleFor(pack) lets a pack rename the mode (Pokémon: "Who's That Pokémon?").
+export const supports = (mode, pack) => (typeof mode.supports === "function" ? !!mode.supports(pack) : true);
+export const modesFor = (modes, pack) => modes.filter((m) => supports(m, pack));
+export const titleOf = (mode, pack) => (typeof mode.titleFor === "function" && pack && mode.titleFor(pack)) || mode.title;

@@ -6,6 +6,7 @@ export default {
   id: "race",
   title: "Relay Race",
   description: "Draft animals, then race them in a relay. Each lineup slot runs one leg (sprint, distance, swim, climb, rough terrain); lowest total team time wins. No appeals.",
+  supports: (pack) => !pack.engine && !!pack.race,
   phases: ["lobby", "draft", "lineup", "race", "results"],
   defaultSettings: { raceLegs: 4, raceDifficulty: "mixed" },
 

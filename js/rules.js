@@ -24,7 +24,7 @@ export const EXTEND_SMALL_MS = 3000;
 export const LAST_MOMENT_MS = 2000;
 export const EXTEND_LAST_MS = 10000;
 export const CLAIM_WINDOW_MS = 10000;
-export const STALL_LIMIT = 8;
+export const STALL_LIMIT = 8, STALL_MIN = 1, STALL_MAX = 30;
 export const MIN_BID = 1;
 export const POOL_MARGIN = 20;
 
@@ -40,6 +40,7 @@ export const DEFAULT_SETTINGS = {
   startBalance: 100,
   rosterSize: 5,
   auctionSeconds: 20,
+  stallLimit: 8,          // after this many unsold lots in a row the next lot is dealt for free (to whoever has the fewest)
   mysteryTraits: false
 };
 export const ROSTER_MIN = 3, ROSTER_MAX = 8;

@@ -117,11 +117,13 @@ export function startHost({ code, key, animals, pack, mode, onLog = () => {} }) 
     const rng = mulberry32(((G.poolSeed ^ Math.imul(idx + 1, 2654435761)) >>> 0));
     const fewest = (a) => { const m = Math.min(...a.map((k) => rosterOf(k).length)); const c = a.filter((k) => rosterOf(k).length === m); return c[Math.floor(rng() * c.length)]; };
     if (!nonBroke.length) return applyOutcome({ id: idx, animalId, winner: fewest(part), price: 0, kind: "deal" });
-    if ((L.stall || 0) >= R.STALL_LIMIT) return applyOutcome({ id: idx, animalId, winner: fewest(part), price: 0, kind: "stall" });
+    if ((L.stall || 0) >= Math.max(R.STALL_MIN, Math.min(R.STALL_MAX, Math.floor(+s.stallLimit) || R.STALL_LIMIT))) return applyOutcome({ id: idx, animalId, winner: fewest(part), price: 0, kind: "stall" });
     const t = N.now();
     await N.tx(code, "auction", (cur) => {
       if (cur && cur.id >= idx) return undefined;
-      return { id: idx, animalId, status: "bidding", deadline: t + s.auctionSeconds * 1000, top: null, skips: {}, claim: null, resolved: false,
+      const liveNow = part.filter((k) => online()[k]);   // only one player can take this lot: skip the bidding screen and offer the free claim straight away
+      const direct = liveNow.length === 1 ? { key: liveNow[0], deadline: t + R.CLAIM_WINDOW_MS } : null;
+      return { id: idx, animalId, status: direct ? "claim" : "bidding", deadline: t + s.auctionSeconds * 1000, top: null, skips: {}, claim: direct, resolved: false,
         participants: Object.fromEntries(part.map((k) => [k, true])), eligible: Object.fromEntries(nonBroke.map((k) => [k, true])),
         limits: Object.fromEntries(nonBroke.map((k) => [k, bal[k] || 0])) };
     });
@@ -129,13 +131,13 @@ export function startHost({ code, key, animals, pack, mode, onLog = () => {} }) 
   async function endDraft() {
     const next = nextPhase(mode, "draft") || "results";
     const r = await N.tx(code, "meta/phase", (c) => (c === "draft" ? next : undefined));
-    if (r && next === "lineup") await N.put(code, "game/lineupDeadline", N.now() + R.LINEUP_MS);
+    if (r && next === "lineup") await N.put(code, "game/lineupDeadline", N.now() + (mode.lineupMs || R.LINEUP_MS));
     log("draft finished");
   }
 
   async function lineupStep() {
     const G = S.game; if (!G) return;
-    if (!G.lineupDeadline) return N.tx(code, "game/lineupDeadline", (c) => c || N.now() + R.LINEUP_MS);
+    if (!G.lineupDeadline) return N.tx(code, "game/lineupDeadline", (c) => c || N.now() + (mode.lineupMs || R.LINEUP_MS));
     const keys = G.keys.filter((k) => rosterOf(k).length > 0);
     const subs = S.lineups || {};
     const allIn = keys.every((k) => subs[k] && subs[k].done);

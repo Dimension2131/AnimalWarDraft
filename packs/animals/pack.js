@@ -3,7 +3,9 @@ const fmtMass = (m) => (m >= 1000 ? +(m / 1000).toPrecision(3) + " t" : (m >= 10
 export default {
   id: "animals",
   name: "Animals",
-  title: "Animal Draft War",
+  title: "Animal War Draft",
+  icon: "🦁",
+  blurb: "Real animals, five stats, one brutal tournament.",
   tagline: "Bid on animals, set your lineup, then watch them fight.",
   nouns: { singular: "animal", plural: "animals" },
 

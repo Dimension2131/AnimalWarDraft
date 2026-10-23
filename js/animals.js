@@ -31,6 +31,10 @@ async function attachTraits(pack, list) {
 }
 
 async function attachSilhouettes(pack, list) {
+  if (typeof pack.imageUrl === "function") for (const a of list) { a.imageAlt = a.image; a.image = pack.imageUrl(a); }               // self-hosted artwork first, original URL kept as fallback
+  if (typeof pack.iconAlt === "function") for (const a of list) a.iconAlt = pack.iconAlt(a);
+  if (pack.silhouetteFromImage) for (const a of list) { if (!a.silhouette && a.image) a.silhouette = a.image; }   // the ink filter turns any transparent artwork into a silhouette
+  if (typeof pack.iconUrl === "function") for (const a of list) a.iconUrl = pack.iconUrl(a);                         // small colour sprite for lists, medals and the lineup
   if (!pack.silhouetteMap) return list;
   try {
     const sil = (await import(at(pack.silhouetteMap))).default || {};

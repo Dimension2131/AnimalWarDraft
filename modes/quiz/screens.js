@@ -30,9 +30,13 @@ export default function createScreens(ctx) {
     try { await N.put(S.code, `quiz/ans/${S.key}/${L.sk(i)}`, L.clean(doc)); } catch (e) { toast(e.message); }
   }
 
+  const cap = (x) => String(x == null ? "" : x).charAt(0).toUpperCase() + String(x == null ? "" : x).slice(1);
+  const QL = Object.assign({ kindTitle: "What kind?", speciesTitle: "Which one exactly?", kindName: "Kind", speciesName: "Species" }, (ctx.pack && ctx.pack.quiz) || {});
+  const noun = (ctx.pack && ctx.pack.nouns && ctx.pack.nouns.singular) || "animal";
+  const shape = ctx.pack && ctx.pack.quiz && ctx.pack.quiz.plate === "round" ? "" : " sq";   // animals: rounded square (whole photo visible); Pokémon: circle with the art shrunk inside it
   const mystery = (id, small) => {
     const e = ent(id), q = () => h("span", { class: "qz-q" }, "?");
-    return h("div", { class: "qz-plate" + (small ? " small" : "") }, e.silhouette ? h("img", { class: "qz-sil", src: e.silhouette, alt: "Mystery silhouette", onerror: (ev) => ev.target.replaceWith(q()) }) : q());
+    return h("div", { class: "qz-plate" + shape + (small ? " small" : "") }, e.silhouette ? h("img", { class: "qz-sil", src: e.silhouette, alt: "Mystery silhouette", onerror: (ev) => ev.target.replaceWith(q()) }) : q());
   };
   function timerBox(cur) {
     const total = Math.max(1000, cur.deadline - cur.start), cd = bar(Math.round(total / 1000)), txt = h("div", { class: "center muted" });
@@ -62,24 +66,34 @@ export default function createScreens(ctx) {
   }
 
   function viewNum(Q, st, cur) {
-    const P = Q.plan, q = P.animals[st.a].num[st.n], i = cur.i, lo = q.min, hi = q.max;
-    const toVal = (pos) => lo * Math.pow(hi / lo, pos / 1000), toPos = (v) => Math.max(0, Math.min(1000, Math.round((1000 * Math.log(v / lo)) / Math.log(hi / lo))));
+    const P = Q.plan, an0 = P.animals[st.a], q = an0.num[st.n], i = cur.i, lo = q.min, hi = q.max, e = ent(an0.id);
+    const log = q.scale ? q.scale === "log" : hi / lo > 40;   // wide ranges (weights) on a log slider, small ranges (stats, speeds) linear
+    const fix = (v) => (q.integer ? Math.max(1, Math.round(v)) : +v.toPrecision(3));
+    const toVal = (pos) => (log ? lo * Math.pow(hi / lo, pos / 1000) : lo + ((hi - lo) * pos) / 1000);
+    const toPos = (v) => Math.max(0, Math.min(1000, Math.round(log ? (1000 * Math.log(v / lo)) / Math.log(hi / lo) : (1000 * (v - lo)) / (hi - lo))));
     const T = timerBox(cur), stat = h("div", { class: "qz-status" });
-    const slider = h("input", { type: "range", min: 0, max: 1000, step: 1, value: 500, "aria-label": q.label + " (log scale)", oninput: () => { box.value = String(+toVal(+slider.value).toPrecision(3)); queue(); } });
-    const box = h("input", { type: "number", min: 0, step: "any", inputmode: "decimal", placeholder: q.unit, "aria-label": q.label, oninput: () => { const v = parse(); if (v !== null) slider.value = toPos(v); queue(); } });
+    const read = h("div", { class: "qz-read" }, "Slide to guess"), slot = h("div", { style: "display:flex;justify-content:center" });
+    const slider = h("input", { type: "range", min: 0, max: 1000, step: 1, value: 500, "aria-label": q.label, oninput: () => { box.value = String(fix(toVal(+slider.value))); paint(); queue(); } });
+    const box = h("input", { type: "number", min: 0, step: q.integer ? 1 : "any", inputmode: q.integer ? "numeric" : "decimal", placeholder: "or type it", "aria-label": q.label, oninput: () => { const v = parse(); if (v !== null) slider.value = toPos(v); paint(); queue(); } });
     slider.value = 500;
-    let touched = false, adopted = false, flushed = false, timer = null;
+    let touched = false, adopted = false, flushed = false, timer = null, shown;
     const parse = () => { const v = Number(box.value); return box.value !== "" && Number.isFinite(v) && v > 0 ? v : null; };
+    const paint = () => { const v = parse(); read.textContent = v === null ? "Slide to guess" : `${L.fmtNum(v)} ${q.unit}`.trim(); read.classList.toggle("set", v !== null); };
     const save = (done) => { const v = parse(); if (v === null) { if (done) toast("Enter a number above 0."); return; } submit(Q, i, { v, done: !!done }); };
     const queue = () => { touched = true; clearTimeout(timer); timer = setTimeout(() => save(false), 300); };
     const lock = h("button", { class: "btn primary big", type: "button", onclick: () => save(true) }, "Lock in");
-    const el = h("div", { class: "qz-stage" }, mystery(P.animals[st.a].id, true),
+    const mid = log ? Math.sqrt(lo * hi) : (lo + hi) / 2;
+    const ticks = h("div", { class: "qz-ticks" }, h("span", {}, L.fmtNum(lo)), h("span", {}, L.fmtNum(mid)), h("span", {}, `${L.fmtNum(hi)} ${q.unit}`.trim()));
+    const pen = P.settings.penalty;
+    const el = h("div", { class: "qz-stage" }, slot,
       h("p", { class: "qz-prompt" }, q.prompt), q.note ? h("p", { class: "qz-hint" }, q.note) : null,
-      h("div", { class: "qz-num" }, slider, h("div", { class: "qz-numrow" }, box, h("span", { class: "qz-unit" }, q.unit)), lock),
-      h("p", { class: "qz-hint" }, `The slider is logarithmic. Up to 1000 points: full marks inside the published range, 0 at a factor of 10 off.`), stat, T.el);
+      h("div", { class: "qz-num" }, read, slider, ticks, h("div", { class: "qz-numrow" }, box, h("span", { class: "qz-unit" }, q.unit)), lock),
+      h("p", { class: "qz-hint" }, `${log ? "Log scale: each step is a multiplication, so small and huge values both fit. " : ""}Up to 1000 points. A guess twice as high or low as the real value scores 0${pen ? `, and you lose up to ${pen} points if you are more than 2× off` : ""}.`), stat, T.el);
     const sync = () => {
+      const info = Q.ident[L.ak(st.a)] || {}, key = info.image || "";
+      if (shown !== key || shown === undefined) { shown = key; slot.replaceChildren(photo(e, info, true)); }   // after the reveal the real picture stays on screen
       const a = myAns(Q, i), can = canPlay(Q), up = N.now() >= cur.deadline;
-      if (a && typeof a.v === "number" && !touched && !adopted) { adopted = true; box.value = String(+a.v.toPrecision(3)); slider.value = toPos(a.v); }
+      if (a && typeof a.v === "number" && !touched && !adopted) { adopted = true; box.value = String(fix(a.v)); slider.value = toPos(a.v); paint(); }
       slider.disabled = box.disabled = lock.disabled = !can || up || !!(a && a.done && up);
       status(stat, !can ? "You are watching this one." : up ? "Time is up." : a && a.done ? "Locked in. You can still change it until the timer ends." : a ? "Saved. Press Lock in when you are sure." : "Move the slider or type a number.", !!(a && a.done));
     };
@@ -87,14 +101,18 @@ export default function createScreens(ctx) {
   }
 
   const photo = (e, info, small) => {
-    const sm = small ? " small" : "", plate = h("div", { class: "qz-plate" + sm });
+    const sm = (small ? " small" : "") + shape, plate = h("div", { class: "qz-plate" + sm });
     const fallback = () => { plate.className = "qz-plate" + sm; plate.replaceChildren(e.silhouette ? h("img", { class: "qz-sil", src: e.silhouette, alt: e.name }) : h("span", { class: "qz-q" }, e.name[0] || "?")); };
-    if (info && info.image) { plate.className = "qz-plate photo" + (info.cutout ? " cutout" : "") + sm; plate.append(h("img", { class: "qz-photo", src: info.image, alt: e.name, onerror: fallback })); }
-    else fallback();
+    if (info && info.image) {
+      plate.className = "qz-plate photo" + (info.cutout ? " cutout" : "") + sm;
+      let retried = false;   // the self-hosted picture first, then the original url of the entry (imageAlt), then the silhouette
+      const img = h("img", { class: "qz-photo", src: info.image, alt: e.name, onerror: () => { if (!retried && e.imageAlt && e.imageAlt !== info.image) { retried = true; img.src = e.imageAlt; } else fallback(); } });
+      plate.append(img);
+    } else fallback();
     return plate;
   };
   function viewIdent(Q, st, cur) {
-    const an = Q.plan.animals[st.a], e = ent(an.id), T = timerBox(cur), kind = h("p", { class: "qz-hint" }), credit = h("p", { class: "qz-src center" }), slot = h("div", {});
+    const an = Q.plan.animals[st.a], e = ent(an.id), T = timerBox(cur), kind = h("p", { class: "qz-hint" }), credit = h("p", { class: "qz-src center" }), slot = h("div", { style: "display:flex;justify-content:center" });
     let shownImg;
     const el = h("div", { class: "qz-stage" }, h("p", { class: "qz-hint" }, "It was…"), slot, h("p", { class: "qz-big" }, e.name), kind, credit, T.el, h("div", { class: "row" }, nextBtn()));
     const nb = el.querySelector(".btn");
@@ -102,7 +120,7 @@ export default function createScreens(ctx) {
       el, sync() {
         const info = Q.ident[L.ak(st.a)] || {}, key = info.image || "";
         if (shownImg !== key || shownImg === undefined) { shownImg = key; slot.replaceChildren(photo(e, info)); }
-        kind.textContent = info.kind ? `Kind: ${info.kind}` : ""; credit.textContent = info.credit || ""; if (nb) nb.hidden = !isHost();
+        kind.textContent = info.kind ? `${QL.kindName}: ${cap(info.kind)}` : ""; credit.textContent = info.credit || ""; if (nb) nb.hidden = !isHost();
       }, tick() { T.tick(); this.sync(); }
     };
   }
@@ -113,12 +131,13 @@ export default function createScreens(ctx) {
     const draw = (R) => {
       if (!R) { box.replaceChildren(h("p", { class: "muted center" }, "Loading results…")); return; }
       const e = ent(R.id), keys = P.keys, name = (k) => nameOf(k);
-      const info = Q.ident[L.ak(st.a)] || {}, parts = [h("h2", { class: "center" }, e.name), photo(e, info, true), e.special ? h("p", { class: "qz-hint" }, e.special) : null];
+      const info = Q.ident[L.ak(st.a)] || {}, one = typeof R.i === "number", hideName = one && !!R.kind;   // the answer card of the "what kind" question must not give the name away: the species question may still follow
+      const parts = hideName ? [h("h2", { class: "center" }, "Answer"), mystery(R.id, true)] : [h("h2", { class: "center" }, e.name), photo(e, info, true), e.special ? h("p", { class: "qz-hint" }, e.special) : null];
       const ident = (title, rows, correctText, label) => h("div", { class: "card" }, h("h3", {}, title), h("p", { class: "qz-true" }, correctText),
         h("div", { class: "scroll" }, h("table", { class: "qz-tbl" }, h("thead", {}, h("tr", {}, h("th", {}, "Player"), h("th", {}, "Answer"), h("th", { class: "n" }, "Points"))),
           h("tbody", {}, keys.map((k) => { const r = rows[k] || { p: 0 }; return row([h("td", {}, name(k)), h("td", {}, label(r)), h("td", { class: "n " + ptsCls(r.p) }, pts(r.p))], k); })))));
-      if (R.kind) parts.push(ident("What kind?", R.kind.rows || {}, `Kind: ${R.kind.correct}`, (r) => (r.v === undefined ? "no answer" : (r.v === R.kind.correct ? "✓ " : "✗ ") + r.v)));
-      if (R.species) parts.push(ident("Which one exactly?", R.species.rows || {}, `Species: ${e.name}`, (r) => (r.v === undefined ? "skipped / no answer" : (r.v === R.species.correct ? "✓ " : "✗ ") + ent(r.v).name)));
+      if (R.kind) parts.push(ident(QL.kindTitle, R.kind.rows || {}, `${QL.kindName}: ${cap(R.kind.correct)}`, (r) => (r.v === undefined ? "no answer" : (r.v === R.kind.correct ? "✓ " : "✗ ") + cap(r.v))));
+      if (R.species) parts.push(ident(QL.speciesTitle, R.species.rows || {}, `${QL.speciesName}: ${e.name}`, (r) => (r.v === undefined ? "skipped / no answer" : (r.v === R.species.correct ? "✓ " : "✗ ") + ent(r.v).name)));
       for (const n of R.nums || []) {
         parts.push(h("div", { class: "card" }, h("h3", {}, n.prompt),
           h("p", { class: "qz-true" }, `Real value: ${L.fmtNum(n.actual)} ${n.unit}`, typeof n.lo === "number" && typeof n.hi === "number" ? ` (published range ${L.fmtNum(n.lo)} to ${L.fmtNum(n.hi)})` : ""),
@@ -131,7 +150,7 @@ export default function createScreens(ctx) {
       box.replaceChildren(...parts);
     };
     const el = h("div", {}, box, T.el, h("div", { class: "row" }, nb));
-    return { el, sync() { const R = Q.reveal[L.ak(st.a)], s = JSON.stringify(R || null); if (s !== sig) { sig = s; draw(R); } nb.hidden = !isHost(); }, tick() { T.tick(); this.sync(); } };
+    return { el, sync() { const R = Q.reveal[L.revealKey(st)], s = JSON.stringify(R || null) + JSON.stringify(Q.ident[L.ak(st.a)] || null); if (s !== sig) { sig = s; draw(R); } nb.hidden = !isHost(); }, tick() { T.tick(); this.sync(); } };
   }
 
   function quizScreen() {
@@ -139,8 +158,8 @@ export default function createScreens(ctx) {
     const head = h("div", { class: "qz-head" }), stage = h("div", {});
     screen(head, h("div", { class: "card" }, stage));
     let shown = "", view = null;
-    const label = (st) => (st.t === "kind" ? "What kind?" : st.t === "species" ? "Species (bonus)" : st.t === "ident" ? "Reveal" : st.t === "num" ? `Question ${st.n + 1}` : "Results");
-    const myScore = () => { if (!Q.plan || !Q.plan.settings || Q.plan.settings.reveal !== "each") return null; let best = null; for (const [k, R] of Object.entries(Q.reveal || {})) if (R && R.board && (best === null || +k.slice(1) > best.a)) best = { a: +k.slice(1), s: R.board[S.key] }; return best ? best.s : 0; };
+    const label = (st) => (st.t === "kind" ? QL.kindTitle : st.t === "species" ? `${QL.speciesName} (bonus)` : st.t === "ident" ? "Reveal" : st.t === "num" ? `Question ${st.n + 1}` : st.q !== undefined ? "Answer" : "Results");
+    const myScore = () => { if (!Q.plan || !Q.plan.settings || Q.plan.settings.reveal !== "each") return null; let best = null; for (const [k, R] of Object.entries(Q.reveal || {})) { if (!R || !R.board) continue; const rank = typeof R.i === "number" ? R.i : +k.slice(1); if (best === null || rank > best.r) best = { r: rank, s: R.board[S.key] }; } return best ? best.s : 0; };
     return {
       update() {
         const P = Q.plan, cur = Q.cur;
@@ -179,7 +198,7 @@ export default function createScreens(ctx) {
         body.replaceChildren(
           h("div", { class: "card" }, h("table", { class: "qz-tbl" }, h("thead", {}, h("tr", {}, h("th", {}, "#"), h("th", {}, "Player"), h("th", { class: "n" }, "Points"))),
             h("tbody", {}, order.map((k, i) => h("tr", { class: k === S.key ? "qz-me" : "" }, h("td", {}, i + 1), h("td", {}, nameOf(k)), h("td", { class: "n" }, h("b", {}, tot[k] ?? 0))))))),
-          h("details", { class: "card" }, h("summary", {}, "Points per animal"), h("div", { class: "scroll" }, h("table", { class: "qz-tbl" },
+          h("details", { class: "card" }, h("summary", {}, `Points per ${noun}`), h("div", { class: "scroll" }, h("table", { class: "qz-tbl" },
             h("thead", {}, h("tr", {}, h("th", {}, ctx.pack.nouns.singular), order.map((k) => h("th", { class: "n" }, nameOf(k))))),
             h("tbody", {}, arr(F.per).map((p) => h("tr", {}, h("td", {}, ent(p.id).name), order.map((k) => h("td", { class: "n " + ptsCls((p.gain || {})[k]) }, pts((p.gain || {})[k] || 0))))))))));
       },
