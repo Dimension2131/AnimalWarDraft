@@ -4,18 +4,37 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0a0f0e">
+  <script>
+    /* First paint: pick the world BEFORE any stylesheet is applied, so there is never a flash of the wrong look.
+       A reload inside a room restores that room's world (js/pack.js stores it); everything else starts in the default pack's world (animals). */
+    (function () { var w = "animals"; try { if (sessionStorage.getItem("adw_room") && sessionStorage.getItem("adw_world")) w = sessionStorage.getItem("adw_world"); } catch (e) { } if (/^[a-z0-9_-]+$/.test(w)) document.documentElement.setAttribute("data-world", w); })();
+  </script>
   <title>Animal War Draft</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='37' cy='37' r='24' fill='%23e8336f'/%3E%3Ccircle cx='30' cy='30' r='24' fill='%232340c8'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Schibsted+Grotesk:wght@400;600;700;800&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=Barlow:wght@500;700&family=Fraunces:wght@700;900&family=Lilita+One&family=Nunito:wght@600;700;800&display=swap">
   <link rel="stylesheet" href="styles/style.css">
+  <link rel="stylesheet" href="styles/worlds/world-core.css">
+  <link rel="stylesheet" href="styles/worlds/animals.css">
+  <link rel="stylesheet" href="styles/worlds/pokemon.css">
+  <link rel="stylesheet" href="styles/worlds/football.css">
 </head>
 <body>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
     <filter id="ink-ink" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0 0 0 0 .086  0 0 0 0 .086  0 0 0 0 .227  0 0 0 1 0"/></filter>
     <filter id="ink-blue" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0 0 0 0 .137  0 0 0 0 .251  0 0 0 0 .784  0 0 0 1 0"/></filter>
     <filter id="ink-pink" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0 0 0 0 .91  0 0 0 0 .2  0 0 0 0 .435  0 0 0 1 0"/></filter>
+    <filter id="ink-moss" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0 0 0 0 0.416  0 0 0 0 0.561  0 0 0 0 0.184  0 0 0 1 0"/></filter>
+    <filter id="ink-clay" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0 0 0 0 0.753  0 0 0 0 0.337  0 0 0 0 0.173  0 0 0 1 0"/></filter>
+    <filter id="ink-honey" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0 0 0 0 0.753  0 0 0 0 0.541  0 0 0 0 0.173  0 0 0 1 0"/></filter>
+    <filter id="ink-fire" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0 0 0 0 0.878  0 0 0 0 0.251  0 0 0 0 0.184  0 0 0 1 0"/></filter>
+    <filter id="ink-water" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0 0 0 0 0.184  0 0 0 0 0.435  0 0 0 0 0.878  0 0 0 1 0"/></filter>
+    <filter id="ink-volt" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0 0 0 0 0.812  0 0 0 0 0.659  0 0 0 0 0.059  0 0 0 1 0"/></filter>
+    <filter id="ink-turf" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0 0 0 0 0.122  0 0 0 0 0.643  0 0 0 0 0.353  0 0 0 1 0"/></filter>
+    <filter id="ink-redcard" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0 0 0 0 0.812  0 0 0 0 0.180  0 0 0 0 0.282  0 0 0 1 0"/></filter>
+    <filter id="ink-floodlight" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0 0 0 0 0.247  0 0 0 0 0.525  0 0 0 0 0.839  0 0 0 1 0"/></filter>
     <filter id="ink-teal" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0 0 0 0 .059  0 0 0 0 .549  0 0 0 0 .502  0 0 0 1 0"/></filter>
   </svg>
   <header id="topbar"></header>
