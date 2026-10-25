@@ -79,11 +79,36 @@ export function filterPool(entities, f, pack) {
 }
 
 let applied = [];
-export function applyPack(pack) {
-  if (typeof document === "undefined") return;
+const prefersReduced = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// Switches the "world" (look) of the whole page. The world is the data-world attribute on <html>: styles/worlds/<id>.css holds the colours,
+// fonts, shapes and textures for it (and sets --w-id: <id>). A pack WITHOUT such a stylesheet falls back to pack.theme (CSS variables set inline).
+// opts.animate  : cross-fade + circular wipe from opts.origin {x,y} (View Transitions API; browsers without it get the CSS colour transitions).
+//                 Never animates on first paint, when the world is unchanged, or with prefers-reduced-motion.
+// opts.update   : DOM changes that belong to the switch (hero art, tagline...). Runs INSIDE the transition, so old and new are cross-faded.
+// Returns a promise that resolves when the switch (and its animation) is over.
+export function applyPack(pack, opts = {}) {
+  if (typeof document === "undefined") return Promise.resolve();
   document.title = pack.title;
-  const root = document.documentElement;
-  for (const k of applied) if (!(pack.theme && k in pack.theme)) root.style.removeProperty(k);
-  applied = Object.keys(pack.theme || {});
-  for (const k of applied) root.style.setProperty(k, pack.theme[k]);
+  const root = document.documentElement, world = pack.world || pack.id, prev = root.dataset ? root.dataset.world : "";
+  const swap = () => {
+    root.setAttribute("data-world", world);
+    let own = false;   // true when styles/worlds/<id>.css is loaded: it already carries the colours, so pack.theme must not override them inline
+    try { own = typeof getComputedStyle === "function" && getComputedStyle(root).getPropertyValue("--w-id").trim() === world; } catch { own = false; }
+    const theme = own ? {} : (pack.theme || {});
+    for (const k of applied) if (!(k in theme)) root.style.removeProperty(k);
+    applied = Object.keys(theme);
+    for (const k of applied) root.style.setProperty(k, theme[k]);
+    try { sessionStorage.setItem("adw_world", world); } catch { /* private mode: the first paint just uses the default world */ }
+    if (typeof opts.update === "function") opts.update();
+  };
+  if (!(opts.animate && prev && prev !== world && !prefersReduced())) { swap(); return Promise.resolve(); }
+  if (typeof document.startViewTransition !== "function") { swap(); return Promise.resolve(); }   // colours still fade via @property transitions
+  const o = opts.origin || {};
+  root.style.setProperty("--vt-x", (o.x != null ? o.x : innerWidth / 2) + "px");
+  root.style.setProperty("--vt-y", (o.y != null ? o.y : innerHeight / 3) + "px");
+  root.setAttribute("data-vt", "1");
+  const t = document.startViewTransition(swap), done = () => root.removeAttribute("data-vt");
+  t.finished.then(done, done);
+  return t.finished.catch(() => { });
 }

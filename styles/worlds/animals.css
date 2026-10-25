@@ -1,0 +1,38 @@
+/* WORLD: animals. Nature: loam, moss, honey and terracotta; leaf-shaped corners; Fraunces + Nunito; leaf / paw texture. */
+:root[data-world="animals"] {
+  --w-id: animals;
+  color-scheme: dark;
+  --paper: #16130d; --sheet: #211c11; --sheet2: #2e2716; --field: #100d08; --dark: #0e0b06;
+  --text: #f0e8d2; --muted: #ab9f80;
+  --edge: rgba(240, 232, 210, .62); --edge-dim: rgba(240, 232, 210, .26); --rule: rgba(240, 232, 210, .13);
+  --blue: #86b049; --blue-deep: #3f5a1f; --pink: #d9663a; --yellow: #e8b04a; --teal: #5fb7a0;
+  --good: #9ad06b; --bad: #f08a6c; --warn: #f2c14e;
+  --display: "Fraunces", "Georgia", "Times New Roman", serif;
+  --body: "Nunito", "Schibsted Grotesk", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --offset: 0 4px 0 var(--blue-deep);
+  --w-topbar: #0f0c07; --w-hover: #3a3120; --w-radius: 18px 6px 18px 6px;
+  --w-texture: radial-gradient(120% 55% at 50% -12%, rgba(134, 176, 73, .20), transparent 62%), radial-gradient(70% 40% at 100% 100%, rgba(217, 102, 58, .13), transparent 70%), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cg fill='none' stroke='%2386b049' stroke-width='1.4' opacity='.55'%3E%3Cpath d='M20 40c10-18 28-18 34-4-8 16-26 20-34 4z'/%3E%3Cpath d='M22 38c10-6 18-8 30-8'/%3E%3Cpath d='M82 96c10-18 28-18 34-4-8 16-26 20-34 4z' transform='rotate%2840 98 94%29'/%3E%3Cpath d='M84 94c10-6 18-8 30-8' transform='rotate%2840 98 94%29'/%3E%3C/g%3E%3Cg fill='%23e8b04a' opacity='.5'%3E%3Cellipse cx='92' cy='26' rx='2.2' ry='4.4' transform='rotate%28-30 92 26%29'/%3E%3Cellipse cx='98' cy='20' rx='2.2' ry='4.4' transform='rotate%2820 98 20%29'/%3E%3Cellipse cx='30' cy='100' rx='2.2' ry='4.4' transform='rotate%28-20 30 100%29'/%3E%3C/g%3E%3C/svg%3E");
+  --w-texture-size: auto, auto, 120px 120px;
+}
+:root[data-world="animals"] h1, :root[data-world="animals"] h2, :root[data-world="animals"] .wordmark { font-weight: 900; letter-spacing: 0 }
+:root[data-world="animals"] .wordmark { text-shadow: 3px 4px 0 var(--blue-deep) }
+:root[data-world="animals"] .wordmark span:nth-child(2) { color: var(--yellow) }
+:root[data-world="animals"] .wordmark span:nth-child(3) { color: var(--blue) }
+:root[data-world="animals"] .bigcode { text-shadow: 3px 3px 0 var(--blue-deep) }
+:root[data-world="animals"] #topbar { border-bottom: 3px double var(--blue-deep) }
+:root[data-world="animals"] .card, :root[data-world="animals"] .acard { border-width: 2px; border-color: var(--rule) }
+:root[data-world="animals"] .acard { box-shadow: 0 5px 0 var(--blue-deep) }
+:root[data-world="animals"] .btn { border-radius: 16px 5px 16px 5px }
+:root[data-world="animals"] .btn.primary { background: var(--yellow); border-color: var(--yellow); box-shadow: 0 4px 0 #8a5f1a }
+:root[data-world="animals"] .chip { border-radius: 12px 3px 12px 3px }
+:root[data-world="animals"] .chip.on { box-shadow: 0 3px 0 var(--blue-deep) }
+:root[data-world="animals"] .vtab { border-radius: 16px 5px 16px 5px }
+:root[data-world="animals"] .vtab.on { box-shadow: 0 4px 0 var(--blue-deep) }
+:root[data-world="animals"] input, :root[data-world="animals"] select { border-radius: 10px 3px 10px 3px }
+:root[data-world="animals"] .hero::after { content: ""; position: absolute; right: -28px; bottom: 18px; width: 130px; height: 130px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220' viewBox='0 0 64 64'%3E%3Cg fill='%23d9663a' opacity='.9'%3E%3Cellipse cx='32' cy='42' rx='13' ry='10'/%3E%3Cellipse cx='15' cy='28' rx='5.5' ry='7.5' transform='rotate%28-20 15 28%29'/%3E%3Cellipse cx='27' cy='17' rx='5.5' ry='8'/%3E%3Cellipse cx='39' cy='17' rx='5.5' ry='8'/%3E%3Cellipse cx='50' cy='28' rx='5.5' ry='7.5' transform='rotate%2820 50 28%29'/%3E%3C/g%3E%3C/svg%3E") center/contain no-repeat; opacity: .07; transform: rotate(-18deg); pointer-events: none }
+:root[data-world="animals"] .ink-blue { filter: url(#ink-moss) }
+:root[data-world="animals"] .ink-pink { filter: url(#ink-clay) }
+:root[data-world="animals"] .ink-teal { filter: url(#ink-honey) }
+:root[data-world="animals"] .qz-plate { border-radius: 42% 58% 55% 45% / 52% 44% 56% 48%; box-shadow: 0 5px 0 var(--blue-deep) }
+:root[data-world="animals"] .qz-plate.sq { border-radius: 26px 8px 26px 8px }
+:root[data-world="animals"] .qz-opt { border-radius: 14px 4px 14px 4px }

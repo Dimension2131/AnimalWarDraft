@@ -15,16 +15,23 @@ export function createHost(ctx) {
     }));
   }
 
+  const tried = new Map();
   let factsP = null, truthP = null;
   const loadFacts = () => factsP || (factsP = (async () => {
     const f = pack.quiz && pack.quiz.facts; if (!f) return null;
-    try { const m = await import(new URL(f, ROOT).href); return m.default && typeof m.default === "object" ? m.default : null; }
-    catch (e) { console.warn("[quiz] facts file not loaded, using entity data only:", e && e.message); return null; }
+    let base = null;
+    try { const m = await import(new URL(f, ROOT).href); base = m.default && typeof m.default === "object" ? m.default : null; }
+    catch (e) { console.warn("[quiz] facts file not loaded, using entity data only:", e && e.message); }
+    const x = pack.quiz && pack.quiz.factsExtra;   // sourced facts: a missing file is a normal state (silent)
+    if (x) { try { const m = await import(new URL(x, ROOT).href); if (m.default && typeof m.default === "object") base = L.mergeFacts(base, m.default); } catch (e) { /* no sourced facts yet */ } }
+    return base;
   })());
   let imgP = null;
   const loadImages = () => imgP || (imgP = (async () => {
-    const f = pack.quiz && pack.quiz.images; if (!f) return null;
-    try { const m = await import(new URL(f, ROOT).href); return m.default && typeof m.default === "object" ? m.default : null; } catch (e) { return null; }
+    for (const f of [].concat((pack.quiz && pack.quiz.images) || [])) {   // a string or a list: the first file that exists is used
+      try { const m = await import(new URL(f, ROOT).href); if (m.default && typeof m.default === "object") return m.default; } catch (e) { /* try the next file */ }
+    }
+    return null;
   })());
   const getTruth = () => truthP || (truthP = loadFacts().then((facts) => L.makeTruth(pack, map, facts)));
 
@@ -62,7 +69,14 @@ export function createHost(ctx) {
         if (t < cur.deadline + L.GRACE_MS && !allDone(P, i)) return;
         return closeStep(P, cur, i);
       }
-    } else if (t < cur.deadline) return;
+    } else {
+      if ((st.t === "ident" || st.t === "reveal" || st.t === "qr") && t - (tried.get(P.gid + ":" + i) || 0) > 3000) {   // safety net: the info doc of this step must exist, otherwise the screen waits forever on "Loading..."
+        tried.set(P.gid + ":" + i, t);
+        const have = await N.getVal(code, st.t === "qr" ? `quiz/qr/${L.sk(st.q)}` : `quiz/${st.t}/${L.ak(st.a)}`).catch(() => null);
+        if (!have) await writeInfo(P, st).catch((e) => console.warn("[quiz] could not write the " + st.t + " info:", e && e.message));
+      }
+      if (t < cur.deadline) return;
+    }
     return advance(P, cur);
   }
 
@@ -76,24 +90,30 @@ export function createHost(ctx) {
   }
   async function writeIdent(P, a) {
     const truth = await getTruth();
-    const id = P.animals[a].id, ee = map.get(id), im = ((await loadImages()) || {})[id] || (ee && ee.image ? { url: ee.image, cutout: true } : null);
-    await N.put(code, `quiz/ident/${L.ak(a)}`, L.clean({ kind: truth.kind(id) || "", image: im && im.url ? im.url : undefined, cutout: im && im.url && im.cutout ? true : undefined, credit: im && im.credit ? im.credit : undefined }));
+    {
+      const st = { a }, id = P.animals[st.a].id, ee = map.get(id), im = ((await loadImages()) || {})[id] || (ee && ee.image ? { url: ee.image, cutout: true } : null);
+      await N.put(code, `quiz/ident/${L.ak(st.a)}`, L.clean({ kind: truth.kind(id) || "", image: im && im.url ? im.url : undefined, cutout: im && im.url && im.cutout ? true : undefined, credit: im && im.credit ? im.credit : undefined }));
+    }
   }
   async function writeInfo(P, st) {
     const truth = await getTruth();
     if (st.t === "ident") await writeIdent(P, st.a);
-    else if (st.t === "reveal") {
+    else if (st.t === "qr") {
+      if (P.steps[st.q].t === "species") await writeIdent(P, st.a);   // the species answer card is where photo and name are revealed (never the kind card: it would spoil the species question)
       const scores = (await N.getVal(code, "quiz/scores")) || {};
-      const qs = st.q !== undefined ? P.steps[st.q] : null;
-      if (qs && qs.t === "species") await writeIdent(P, st.a);   // the answer card of the species question shows the real picture, which comes before the ident card
-      await N.put(code, `quiz/reveal/${L.revealKey(st)}`, L.buildReveal(P, st.a, scores, truth, st.q));
+      await N.put(code, `quiz/qr/${L.sk(st.q)}`, L.buildQR(P, st.q, scores, truth));
+    }
+    else if (st.t === "reveal") {
+      if (!P.steps.some((x) => x.t === "ident" && x.a === st.a)) await writeIdent(P, st.a);   // no separate "It was..." step for this animal: the Results card needs the photo doc
+      const scores = (await N.getVal(code, "quiz/scores")) || {};
+      await N.put(code, `quiz/reveal/${L.ak(st.a)}`, L.buildReveal(P, st.a, scores, truth));
     }
   }
   async function advance(P, cur) {
     const ni = cur.i + 1;
     if (ni >= P.steps.length) return finish(P);
     const nx = P.steps[ni];
-    if (nx.t === "ident" || nx.t === "reveal") await writeInfo(P, nx);
+    if (nx.t === "ident" || nx.t === "reveal" || nx.t === "qr") await writeInfo(P, nx);
     const dur = L.stepMs(P, nx, false);
     await N.tx(code, "quiz/cur", (c) => {
       if (!c || c.gid !== cur.gid || c.i !== cur.i) return undefined;
@@ -118,4 +138,4 @@ export function createHost(ctx) {
   }
 
   return { step, start, api: { playAgain: start, skip } };
-}
+}

@@ -16,7 +16,7 @@ const imgCache = new Map();
 function getImg(url) {
   if (!url) return null;
   let i = imgCache.get(url);
-  if (!i) { i = new Image(); i.crossOrigin = "anonymous"; i.onerror = () => { i.bad = true; }; i.src = url; imgCache.set(url, i); }
+  if (!i) { i = new Image(); i.decoding = "async"; i.onerror = () => { i.bad = true; }; i.src = url; imgCache.set(url, i); }
   return i.complete && !i.bad && i.naturalWidth ? i : null;
 }
 const silCache = new Map();

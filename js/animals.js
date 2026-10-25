@@ -45,10 +45,13 @@ async function attachSilhouettes(pack, list) {
 
 export async function attachImages(pack, list) {
   if (!pack.imageMap) return list;
-  try {
-    const m = (await import(at(pack.imageMap))).default || {};
-    for (const a of list) if (!a.image && m[a.id] && typeof m[a.id].url === "string") a.image = m[a.id].url;
-  } catch (err) { /* no photo map yet */ }
+  for (const file of [].concat(pack.imageMap)) {   // a string or a list: the first file that exists is used
+    try {
+      const m = (await import(at(file))).default || {};
+      for (const a of list) if (!a.image && m[a.id] && typeof m[a.id].url === "string") a.image = m[a.id].url;
+      break;
+    } catch (err) { /* this file does not exist: try the next one, or attach nothing */ }
+  }
   return list;
 }
 export async function loadPackData(id) {
@@ -62,4 +65,4 @@ export async function loadPackData(id) {
 
 const DEFAULT = await loadPackData(await defaultPackId());
 export const ANIMALS = DEFAULT.list;
-export const ANIMAL_MAP = DEFAULT.map;
+export const ANIMAL_MAP = DEFAULT.map;

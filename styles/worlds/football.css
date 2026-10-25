@@ -1,0 +1,35 @@
+/* WORLD: football (placeholder look). Night match: pitch green, chalk white, referee-card yellow / red; scoreboard capitals (Barlow Condensed); mowing stripes + centre circle. */
+:root[data-world="football"] {
+  --w-id: football;
+  color-scheme: dark;
+  --paper: #07140d; --sheet: #0e2317; --sheet2: #153322; --field: #050f09; --dark: #04100a;
+  --text: #f3f7ee; --muted: #8fb39c;
+  --edge: rgba(243, 247, 238, .68); --edge-dim: rgba(243, 247, 238, .28); --rule: rgba(243, 247, 238, .13);
+  --blue: #4aa3ff; --blue-deep: #1b4f9a; --pink: #ff3d57; --yellow: #ffe14d; --teal: #35e07f;
+  --good: #35e07f; --bad: #ff7a8a; --warn: #ffc04d;
+  --display: "Barlow Condensed", "Arial Narrow", "Arial Black", system-ui, sans-serif;
+  --body: "Barlow", "Schibsted Grotesk", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --offset: 3px 3px 0 var(--pink);
+  --w-topbar: #040d08; --w-hover: #1d4430; --w-radius: 3px;
+  --w-texture: radial-gradient(90% 45% at 50% -5%, rgba(255, 255, 255, .10), transparent 65%), url("data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%22-1.5%20-1.5%20108%2071%22%3E%3Cg%20fill=%22none%22%20stroke=%22%23fff%22%20stroke-opacity=%22.2%22%20stroke-width=%22.32%22%3E%3Crect%20x=%220%22%20y=%220%22%20width=%22105%22%20height=%2268%22/%3E%3Cpath%20d=%22M52.5%200V68%22/%3E%3Ccircle%20cx=%2252.5%22%20cy=%2234%22%20r=%229.15%22/%3E%3Ccircle%20cx=%2252.5%22%20cy=%2234%22%20r=%22.45%22%20fill=%22%23fff%22%20stroke=%22none%22/%3E%3Crect%20x=%220%22%20y=%2213.84%22%20width=%2216.5%22%20height=%2240.32%22/%3E%3Crect%20x=%2288.5%22%20y=%2213.84%22%20width=%2216.5%22%20height=%2240.32%22/%3E%3Crect%20x=%220%22%20y=%2224.84%22%20width=%225.5%22%20height=%2218.32%22/%3E%3Crect%20x=%2299.5%22%20y=%2224.84%22%20width=%225.5%22%20height=%2218.32%22/%3E%3Ccircle%20cx=%2211%22%20cy=%2234%22%20r=%22.4%22%20fill=%22%23fff%22%20stroke=%22none%22/%3E%3Ccircle%20cx=%2294%22%20cy=%2234%22%20r=%22.4%22%20fill=%22%23fff%22%20stroke=%22none%22/%3E%3Cpath%20d=%22M16.5%2027.35A9.15%209.15%200%200%201%2016.5%2040.65M88.5%2027.35A9.15%209.15%200%200%200%2088.5%2040.65%22/%3E%3Cpath%20d=%22M0%201A1%201%200%200%200%201%200M104%200A1%201%200%200%200%20105%201M105%2067A1%201%200%200%200%20104%2068M1%2068A1%201%200%200%200%200%2067%22/%3E%3C/g%3E%3C/svg%3E") center / contain no-repeat, repeating-linear-gradient(90deg, rgba(255, 255, 255, .028) 0 56px, transparent 56px 112px);
+  --w-texture-size: auto, contain, auto;
+}
+:root[data-world="football"] h1, :root[data-world="football"] h2, :root[data-world="football"] .wordmark, :root[data-world="football"] .vtab b { text-transform: uppercase; font-weight: 800; letter-spacing: .03em }
+:root[data-world="football"] .wordmark { text-shadow: 4px 4px 0 var(--pink); font-style: italic }
+:root[data-world="football"] .wordmark span:nth-child(2) { color: var(--yellow) }
+:root[data-world="football"] .bigcode { text-shadow: 3px 3px 0 var(--pink) }
+:root[data-world="football"] #topbar { border-bottom: 3px solid var(--teal) }
+:root[data-world="football"] .card { border-left: 4px solid var(--teal) }
+:root[data-world="football"] .btn { text-transform: uppercase; letter-spacing: .05em; font-weight: 700 }
+:root[data-world="football"] .btn.primary { background: var(--yellow); border-color: var(--yellow); box-shadow: 3px 3px 0 var(--pink) }
+:root[data-world="football"] .chip { border-radius: 2px }
+:root[data-world="football"] .vtab { border-radius: 3px }
+:root[data-world="football"] .ink-blue { filter: url(#ink-floodlight) }
+:root[data-world="football"] .ink-pink { filter: url(#ink-redcard) }
+:root[data-world="football"] .ink-teal { filter: url(#ink-turf) }
+/* portrait screens (phones): the pitch is drawn upright so the whole touchline-to-touchline pitch fits, corners included */
+@media (orientation: portrait) {
+:root[data-world="football"] { --w-texture: radial-gradient(90% 45% at 50% -5%, rgba(255, 255, 255, .10), transparent 65%), url("data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%22-1.5%20-1.5%2071%20108%22%3E%3Cg%20transform=%22translate(68%200)%20rotate(90)%22%20fill=%22none%22%20stroke=%22%23fff%22%20stroke-opacity=%22.2%22%20stroke-width=%22.32%22%3E%3Crect%20x=%220%22%20y=%220%22%20width=%22105%22%20height=%2268%22/%3E%3Cpath%20d=%22M52.5%200V68%22/%3E%3Ccircle%20cx=%2252.5%22%20cy=%2234%22%20r=%229.15%22/%3E%3Ccircle%20cx=%2252.5%22%20cy=%2234%22%20r=%22.45%22%20fill=%22%23fff%22%20stroke=%22none%22/%3E%3Crect%20x=%220%22%20y=%2213.84%22%20width=%2216.5%22%20height=%2240.32%22/%3E%3Crect%20x=%2288.5%22%20y=%2213.84%22%20width=%2216.5%22%20height=%2240.32%22/%3E%3Crect%20x=%220%22%20y=%2224.84%22%20width=%225.5%22%20height=%2218.32%22/%3E%3Crect%20x=%2299.5%22%20y=%2224.84%22%20width=%225.5%22%20height=%2218.32%22/%3E%3Ccircle%20cx=%2211%22%20cy=%2234%22%20r=%22.4%22%20fill=%22%23fff%22%20stroke=%22none%22/%3E%3Ccircle%20cx=%2294%22%20cy=%2234%22%20r=%22.4%22%20fill=%22%23fff%22%20stroke=%22none%22/%3E%3Cpath%20d=%22M16.5%2027.35A9.15%209.15%200%200%201%2016.5%2040.65M88.5%2027.35A9.15%209.15%200%200%200%2088.5%2040.65%22/%3E%3Cpath%20d=%22M0%201A1%201%200%200%200%201%200M104%200A1%201%200%200%200%20105%201M105%2067A1%201%200%200%200%20104%2068M1%2068A1%201%200%200%200%200%2067%22/%3E%3C/g%3E%3C/svg%3E") center / contain no-repeat, repeating-linear-gradient(0deg, rgba(255, 255, 255, .028) 0 56px, transparent 56px 112px) }
+}
+/* a card inside a card (the draft's claim / bid box inside the dock) must not repeat the green edge */
+:root[data-world="football"] .card .card { border-left: 0 }

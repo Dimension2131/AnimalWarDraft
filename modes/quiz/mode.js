@@ -1,6 +1,6 @@
 import createScreens from "./screens.js";
 import { createHost } from "./host.js";
-import { DEFAULTS } from "./logic.js";
+import { DEFAULTS, DIFFICULTIES } from "./logic.js";
 
 export default {
   id: "quiz",
@@ -19,26 +19,31 @@ export default {
     const cbSpecies = h("input", { type: "checkbox", onchange: (e) => edit((s) => { s.quizSpecies = e.target.checked; }) });
     const cbLow = h("input", { type: "checkbox", onchange: (e) => edit((s) => { s.quizLowConf = e.target.checked; }) });
     const selReveal = h("select", { onchange: (e) => edit((s) => { s.quizReveal = e.target.value; }) },
-      h("option", { value: "each" }, "After each round"), h("option", { value: "end" }, "Only at the end"));
+      h("option", { value: "question" }, "After each question"), h("option", { value: "each" }, `After each ${(pack && pack.nouns && pack.nouns.singular) || "animal"}`), h("option", { value: "end" }, "Only at the end"));
+    const selLevel = h("select", { onchange: (e) => edit((s) => { s.quizDifficulty = e.target.value; }) },
+      h("option", { value: "easy" }, "Easy: wrong options clearly different"), h("option", { value: "medium" }, "Medium: a mix of look-alikes and others"),
+      h("option", { value: "hard" }, "Hard: mostly look-alikes"), h("option", { value: "expert" }, "Expert: 5 options, all look-alikes"), h("option", { value: "escalating" }, "Escalating: easy at first, expert at the end"));
     const inputs = [[inAnimals, "quizAnimals"], [inSecs, "quizSeconds"], [inNum, "quizNumeric"], [inPen, "quizPenalty"]];
     return {
       nodes: [
         h("h4", {}, "Silhouette Quiz"),
         h("div", { class: "grid2" }, h("label", {}, `${Cn} per game (1-30)`, inAnimals), h("label", {}, "Seconds per question (5-120)", inSecs), h("label", {}, `Numeric questions per ${N1 === "animals" ? "animal" : "round"} (0-6)`, inNum), h("label", {}, "Results reveal", selReveal)),
+        h("label", {}, "Difficulty", selLevel),
         h("label", { class: "row" }, cbSpecies, " Species bonus question (optional for players)"),
         h("label", {}, "Wrong species answer costs (points)", inPen),
         h("label", { class: "row" }, cbLow, " Also use low-confidence facts"),
-        h("p", { class: "muted small" }, "Kind: 200 points. Species: 400 if right, minus the penalty if wrong, 0 if skipped. Numeric: 1000 inside the published range, then falling to 0 at a factor of 10 off. Some entries have fewer numeric facts than requested; they just get fewer questions. Entries without a silhouette are never drawn. Players who do not answer score 0.")
+        h("p", { class: "muted small" }, "Kind: 200 points. Species: 400 if right, minus the penalty if wrong, 0 if skipped (both are multiplied by the level: Easy x1, Medium x1.5, Hard x2, Expert x3). Numeric: 1000 inside the published range, then falling to 0 at a factor of 2 off; further off, you lose points, up to the penalty at a factor of 5 or more. Some entries have fewer numeric facts than requested; they just get fewer questions. Entries without a silhouette are never drawn. Players who do not answer score 0.")
       ],
       refresh(L, host) {
         for (const [el, k] of inputs) { if (typeof document === "undefined" || document.activeElement !== el) el.value = L[k] ?? DEFAULTS[k]; el.disabled = !host; }
         cbSpecies.checked = L.quizSpecies !== false; cbSpecies.disabled = !host;
         cbLow.checked = !!L.quizLowConf; cbLow.disabled = !host;
-        selReveal.value = L.quizReveal === "end" ? "end" : "each"; selReveal.disabled = !host;
+        selReveal.value = L.quizReveal === "end" ? "end" : L.quizReveal === "each" ? "each" : "question"; selReveal.disabled = !host;
+        selLevel.value = DIFFICULTIES.includes(L.quizDifficulty) ? L.quizDifficulty : DEFAULTS.quizDifficulty; selLevel.disabled = !host;
       }
     };
   },
 
   screens: createScreens,
   createHost
-};
+};

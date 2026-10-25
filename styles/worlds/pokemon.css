@@ -1,0 +1,35 @@
+/* WORLD: pokemon. Elemental: night-battle indigo with fire / water / electric / grass accents, pill shapes, poke-ball motif; Lilita One + Nunito. */
+:root[data-world="pokemon"] {
+  --w-id: pokemon;
+  color-scheme: dark;
+  --paper: #0b0d1e; --sheet: #151a38; --sheet2: #1f2650; --field: #080a18; --dark: #070816;
+  --text: #f2f4ff; --muted: #a0a9da;
+  --edge: rgba(242, 244, 255, .66); --edge-dim: rgba(242, 244, 255, .28); --rule: rgba(242, 244, 255, .14);
+  --blue: #3d8bff; --blue-deep: #1c3fa6; --pink: #ff4d4d; --yellow: #ffd426; --teal: #5bd45f;
+  --good: #4be08f; --bad: #ff7a86; --warn: #ffb347;
+  --display: "Lilita One", "Arial Rounded MT Bold", "Arial Black", system-ui, sans-serif;
+  --body: "Nunito", "Schibsted Grotesk", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --offset: 3px 3px 0 var(--pink);
+  --w-topbar: #070916; --w-hover: #2a3366; --w-radius: 14px;
+  --w-texture: radial-gradient(55% 38% at 0 100%, rgba(255, 77, 77, .22), transparent 70%), radial-gradient(55% 38% at 100% 100%, rgba(61, 139, 255, .22), transparent 70%), radial-gradient(45% 28% at 50% 0, rgba(255, 212, 38, .14), transparent 70%), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260' viewBox='0 0 100 100'%3E%3Cg fill='none' stroke='%23ffffff' stroke-width='4'%3E%3Ccircle cx='50' cy='50' r='44'/%3E%3Cpath d='M6 50h30M64 50h30'/%3E%3Ccircle cx='50' cy='50' r='14'/%3E%3C/g%3E%3Cpath d='M6 50a44 44 0 0 1 88 0h-30a14 14 0 0 0-28 0z' fill='%23ff4d4d'/%3E%3C/svg%3E") right -70px bottom -60px / 260px 260px no-repeat, url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='90' viewBox='0 0 90 90'%3E%3Cpath d='M52 8 22 50h20l-6 32 32-44H48z' fill='%23ffd426' opacity='.9'/%3E%3C/svg%3E") left 12px top 90px / 90px 90px no-repeat;
+  --w-texture-size: auto, auto, auto, 260px 260px, 90px 90px;
+}
+:root[data-world="pokemon"] h1, :root[data-world="pokemon"] h2, :root[data-world="pokemon"] .wordmark { letter-spacing: .01em }
+:root[data-world="pokemon"] .wordmark { text-shadow: 4px 4px 0 var(--pink), 7px 7px 0 var(--blue-deep) }
+:root[data-world="pokemon"] .wordmark span:nth-child(2) { color: var(--yellow) }
+:root[data-world="pokemon"] .bigcode { text-shadow: 3px 3px 0 var(--pink) }
+:root[data-world="pokemon"] #topbar { border-bottom: 3px solid var(--pink) }
+:root[data-world="pokemon"] #topbar .brand::before { content: ""; display: inline-block; width: 1.05em; height: 1.05em; margin-right: .45em; vertical-align: -.15em; border-radius: 50%; border: 2px solid var(--text); background: linear-gradient(var(--pink) 0 44%, var(--text) 44% 56%, #f4f4fb 56%) }
+:root[data-world="pokemon"] .card { background: linear-gradient(90deg, #ff4d4d, #ffd426, #3d8bff, #5bd45f) top / 100% 3px no-repeat, var(--sheet); border-color: var(--rule) }
+:root[data-world="pokemon"] .btn { border-radius: 999px }
+:root[data-world="pokemon"] .btn.primary { background: var(--yellow); border-color: var(--yellow); box-shadow: 0 4px 0 #b58a00 }
+:root[data-world="pokemon"] .chip { border-radius: 999px }
+:root[data-world="pokemon"] .chip.on { box-shadow: 0 3px 0 var(--pink) }
+:root[data-world="pokemon"] .vtab { border-radius: 16px }
+:root[data-world="pokemon"] .vtab.on { box-shadow: 0 4px 0 var(--pink) }
+:root[data-world="pokemon"] input, :root[data-world="pokemon"] select { border-radius: 10px }
+:root[data-world="pokemon"] .ink-blue { filter: url(#ink-water) }
+:root[data-world="pokemon"] .ink-pink { filter: url(#ink-fire) }
+:root[data-world="pokemon"] .ink-teal { filter: url(#ink-volt) }
+:root[data-world="pokemon"] .acard.pk .pk-cplate, :root[data-world="pokemon"] .qz-plate:not(.sq) { background: radial-gradient(circle at 50% 40%, #fff6b8, var(--yellow) 62%); box-shadow: 0 0 0 3px var(--dark), 0 0 22px rgba(255, 212, 38, .55) }
+:root[data-world="pokemon"] .qz-opt { border-radius: 14px }

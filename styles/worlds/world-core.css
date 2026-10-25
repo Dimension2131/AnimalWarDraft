@@ -1,0 +1,73 @@
+/* ==========================================================================
+   WORLDS: shared machinery (docs/PACK_FORMAT.md, "Worlds").
+   Every pack is a "world": <html data-world="<packid>"> (set by applyPack() in js/pack.js, and by the inline script in index.html on first paint).
+   Each world has its own file in this folder that (1) redefines the colour tokens from styles/style.css, (2) sets --w-id: <packid>,
+   (3) adds its shapes, fonts and textures. This file only holds what ALL worlds share: animatable tokens, the switch animation, the texture layer.
+   Rules for a world file: scope every rule with :root[data-world="<id>"]; never change layout (size, grid, position of real content).
+   ========================================================================== */
+
+/* Registered colour tokens: this is what lets the browser fade them smoothly when data-world changes. Initial values = the original look. */
+@property --paper { syntax: "<color>"; inherits: true; initial-value: #0a0f0e }
+@property --sheet { syntax: "<color>"; inherits: true; initial-value: #101a18 }
+@property --sheet2 { syntax: "<color>"; inherits: true; initial-value: #172523 }
+@property --field { syntax: "<color>"; inherits: true; initial-value: #070c0b }
+@property --dark { syntax: "<color>"; inherits: true; initial-value: #070c0b }
+@property --text { syntax: "<color>"; inherits: true; initial-value: #e6e9dc }
+@property --muted { syntax: "<color>"; inherits: true; initial-value: #8a9c96 }
+@property --edge { syntax: "<color>"; inherits: true; initial-value: rgba(230, 233, 220, .7) }
+@property --edge-dim { syntax: "<color>"; inherits: true; initial-value: rgba(230, 233, 220, .28) }
+@property --rule { syntax: "<color>"; inherits: true; initial-value: rgba(230, 233, 220, .12) }
+@property --blue { syntax: "<color>"; inherits: true; initial-value: #5f84ff }
+@property --blue-deep { syntax: "<color>"; inherits: true; initial-value: #2a46b8 }
+@property --pink { syntax: "<color>"; inherits: true; initial-value: #ff5c95 }
+@property --yellow { syntax: "<color>"; inherits: true; initial-value: #ffd23a }
+@property --teal { syntax: "<color>"; inherits: true; initial-value: #33d6c0 }
+@property --good { syntax: "<color>"; inherits: true; initial-value: #3fe0a8 }
+@property --bad { syntax: "<color>"; inherits: true; initial-value: #ff7aa6 }
+@property --warn { syntax: "<color>"; inherits: true; initial-value: #ffc04d }
+@property --w-topbar { syntax: "<color>"; inherits: true; initial-value: #050908 }
+@property --w-hover { syntax: "<color>"; inherits: true; initial-value: #21352f }
+
+:root {
+  --w-topbar: #050908;   /* top bar background */
+  --w-hover: #21352f;    /* .btn hover background */
+  --w-radius: 6px;       /* corner radius of cards and buttons */
+  --w-texture: none;     /* decorative layer behind everything (a world sets one or more backgrounds) */
+  --w-texture-size: auto;
+  transition: --paper .7s ease, --sheet .7s ease, --sheet2 .7s ease, --field .7s ease, --dark .7s ease, --text .7s ease, --muted .7s ease,
+    --edge .7s ease, --edge-dim .7s ease, --rule .7s ease, --blue .7s ease, --blue-deep .7s ease, --pink .7s ease, --yellow .7s ease,
+    --teal .7s ease, --good .7s ease, --bad .7s ease, --warn .7s ease, --w-topbar .7s ease, --w-hover .7s ease;
+}
+
+/* While a View Transition runs, the new page is cross-faded as a whole: the per-token fade would only muddy it. */
+:root[data-vt] { transition: none }
+
+/* Decorative layer: fixed, behind all content, never catches clicks. Each world fills --w-texture. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--w-texture);
+  background-size: var(--w-texture-size)
+}
+
+#topbar { background: var(--w-topbar) }
+.btn:hover { background: var(--w-hover) }
+.card, .btn, .acard { border-radius: var(--w-radius) }
+
+/* ---------- the switch animation: circular wipe out of the clicked tab (--vt-x / --vt-y), new world fades in under the edge ---------- */
+::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal }
+::view-transition-old(root) { z-index: 1 }
+::view-transition-new(root) { z-index: 2; animation: world-wipe .8s cubic-bezier(.4, 0, .15, 1) both }
+@keyframes world-wipe {
+  from { clip-path: circle(0 at var(--vt-x, 50%) var(--vt-y, 30%)); opacity: .2 }
+  35% { opacity: 1 }
+  to { clip-path: circle(150vmax at var(--vt-x, 50%) var(--vt-y, 30%)); opacity: 1 }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { transition: none }
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important }
+}

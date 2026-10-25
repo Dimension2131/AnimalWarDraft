@@ -4,13 +4,24 @@ import * as P from "./pack.js";
 import * as M from "./modes.js";
 import { tip, installTips } from "./tips.js";
 import { simulate, validateAnimals, balanceTest } from "./sim.js";
+import * as FBC from "../modes/football/card.js";
+import { preload, failed, cardImage } from "./preload.js";
 
 const $ = (s, r = document) => r.querySelector(s);
 const arr = (v) => (Array.isArray(v) ? v : v ? Object.values(v) : []);
-const icon = (a) => {
+const icon = (a, eager) => {
   const em = () => h("span", { class: "emoji" }, a.emoji);
-  const src = a.iconUrl || a.silhouette;   // iconUrl = small colour sprite (Pokémon); silhouette = ink-filtered shape (animals)
-  return src ? h("img", { class: "sil" + (a.iconUrl ? " color" : ""), src, alt: a.name || "", loading: "lazy", onerror: (e) => { if (a.iconAlt && !e.target.dataset.fb) { e.target.dataset.fb = "1"; e.target.src = a.iconAlt; } else e.target.replaceWith(em()); } }) : em();
+  let src = a.iconUrl || a.silhouette;   // iconUrl = small colour sprite (Pokémon); silhouette = ink-filtered shape (animals)
+  if (src && failed.has(src)) src = a.iconAlt && !failed.has(a.iconAlt) ? a.iconAlt : null;   // known-missing: no request, no broken-image flash on re-render
+  if (!src) return em();
+  const first = src;
+  // eager = the picture of the lot being auctioned: never lazy (a lazy <img> is only fetched after layout), and high priority.
+  const attrs = { class: "sil" + (a.iconUrl ? " color" : ""), src, alt: a.name || "", decoding: "async", onerror: (e) => {
+    failed.add(first);
+    if (a.iconAlt && first !== a.iconAlt && !failed.has(a.iconAlt)) { e.target.src = a.iconAlt; } else e.target.replaceWith(em());
+  } };
+  if (eager) attrs.fetchpriority = "high"; else attrs.loading = "lazy";
+  return h("img", attrs);
 };
 function hero(pack, list) {
   const want = new Set(pack.heroIds || []);
@@ -34,8 +45,6 @@ function h(tag, attrs, ...kids) {
   return e;
 }
 const root = $("#app");
-const warmed = new Set();
-const warm = (list) => list.length > 400 ? 0 : setTimeout(() => { for (const a of list) if (a.silhouette && !warmed.has(a.silhouette)) { warmed.add(a.silhouette); new Image().src = a.silhouette; } }, 0);
 const secs = (ms) => Math.max(0, Math.ceil(ms / 1000));
 let toastT;
 function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("show"), 3500); }
@@ -96,14 +105,16 @@ async function main() {
     const k = want(); if (!k || k === ctxKey || k === ctxLoading) return;
     ctxLoading = k;
     try {
-      const [pk, md] = k.split("|"), d = await loadPackData(pk);
-      PK = d.pack; ENT = { list: d.list, map: d.map }; MD = await M.getMode(md); if (!M.supports(MD, PK)) MD = M.modesFor(MODES, PK)[0] || MD; warm(d.list); P.applyPack(PK); ctxKey = k;
+      const [pk, md] = k.split("|");
+      P.getPack(pk).then((p) => P.applyPack(p, { animate: true }));   // the world switches as soon as the room says which pack it uses, before the (bigger) data load
+      const d = await loadPackData(pk);
+      PK = d.pack; ENT = { list: d.list, map: d.map }; MD = await M.getMode(md); if (!M.supports(MD, PK)) MD = M.modesFor(MODES, PK)[0] || MD; P.applyPack(PK); ctxKey = k;
     } catch (e) { toast("Could not load this room's category or mode: " + e.message); }
     ctxLoading = ""; schedule();
   }
   const PATHS = ["meta", "players", "spectators", "ledger", "game", "auction", "lineups", "tour", "appeals", "host"];
   let unsubs = [], runner = null, current = null, currentName = "", raf = 0, booting = false;
-  warm(DEFAULT.list); P.applyPack(PK);
+  if (!sessionStorage.getItem("adw_room")) P.applyPack(PK);   // a reload inside a room keeps the world index.html already set; ensureCtx() confirms it
   const nameOf = (k) => (S.players && S.players[k] && S.players[k].name) || k;
   const isHost = () => !!(S.host && S.host.sid === N.sid);
   const settings = () => {
@@ -148,7 +159,7 @@ async function main() {
     if (runner) { runner.stop(); runner = null; }
     if (S.code) await N.leaveRoom(S.code, S.role, S.key);
     stopWatching(); sessionStorage.removeItem("adw_room"); ctxKey = "";
-    P.getPack(homePack).then((p) => P.applyPack(p));
+    P.getPack(homePack).then((p) => P.applyPack(p, { animate: true }));
     Object.assign(S, { code: null, role: null, key: null, view: "home" }); $("#chat").hidden = true; $("#banner").hidden = true; schedule();
   }
 
@@ -224,7 +235,7 @@ async function main() {
   function pokemonCard(a, compact, note) {
     const stats = P.engineStats(PK), max = PK.statMax || 100, cap = (x) => x.charAt(0).toUpperCase() + x.slice(1);
     if (!a) return h("div", { class: "acard ph" }, h("div", { class: "plate-head" }, h("div", { class: "medal" }, h("span", { class: "qmark" }, "?")), h("div", { class: "grow" }, h("strong", { class: "aname" }, "???"), h("div", { class: "special" }, note || "Next Pokémon…"))));
-    const art = h("img", { class: "pk-art", src: a.image, alt: a.name, loading: "lazy", onerror: (e) => { if (a.imageAlt && !e.target.dataset.fb) { e.target.dataset.fb = "1"; e.target.src = a.imageAlt; } else e.target.replaceWith(h("span", { class: "emoji" }, a.emoji)); } });
+    const art = h("img", { class: "pk-art", src: failed.has(a.image) && a.imageAlt ? a.imageAlt : a.image, alt: a.name, decoding: "async", fetchpriority: compact ? null : "high", loading: compact ? "lazy" : null, onerror: (e) => { failed.add(a.image); if (a.imageAlt && !e.target.dataset.fb) { e.target.dataset.fb = "1"; e.target.src = a.imageAlt; } else e.target.replaceWith(h("span", { class: "emoji" }, a.emoji)); } });
     return h("div", { class: "acard pk" },
       h("div", { class: "plate-head" }, h("div", { class: "pk-cplate" }, art), h("div", { class: "grow" }, h("strong", { class: "aname" }, a.name), h("div", { class: "special" }, a.special || ""),
         h("div", { class: "row wrap tagrow" }, a.types.map((t) => h("span", { class: "tpill type-" + t }, cap(t))), a.cls !== "Regular" ? h("span", { class: "pill" }, a.cls) : null))),
@@ -234,6 +245,7 @@ async function main() {
   }
   function animalCard(a, compact, note, hideTraits) {
     if (PK.engine === "pokemon") return pokemonCard(a, compact, note);
+    if (PK.engine === "football") return FBC.card({ h, tip, PK }, a, compact, note);
     const stats = P.engineStats(PK);
     const zone = (statVals, tileVals, ta) => compact ? null : h("div", { class: "statzone" },
       h("div", { class: "stats" }, stats.map((st) => { const s = st.key; return h("div", { class: "stat s-" + s }, tip(h("span", {}, st.label), st.description), h("div", { class: "sbar" }, h("i", { style: `width:${statVals ? statVals[s] : 0}%` })), h("b", {}, statVals ? statVals[s] : "?")); }), toughRow(ta)),
@@ -245,7 +257,7 @@ async function main() {
       h("div", { class: "row wrap traitrow" }),
       zone(null, null, null));
     return h("div", { class: "acard" },
-      h("div", { class: "plate-head" }, h("div", { class: "medal" }, icon(a)), h("div", { class: "grow" }, h("strong", { class: "aname" }, a.name), h("div", { class: "special" }, a.special || ""))),
+      h("div", { class: "plate-head" }, h("div", { class: "medal" }, icon(a, !compact)), h("div", { class: "grow" }, h("strong", { class: "aname" }, a.name), h("div", { class: "special" }, a.special || ""))),
       h("div", { class: "row meta" }, (PK.cardChips ? PK.cardChips(a) : []).map((x) => h("span", { class: "chip-s" }, x))),
       h("div", { class: "row wrap tagrow" }, arr(a.tags).map((t) => h("span", { class: "pill tag-" + t }, t))),
       h("div", { class: "row wrap traitrow" }, ...traitPills(a, hideTraits)),
@@ -253,7 +265,7 @@ async function main() {
   }
   const bar = (total) => { const i = h("i"); const marks = total ? h("div", { class: "cmarks" }, [0.25, 0.5, 0.75].map((f) => h("span", { style: `left:${f * 100}%` }, `${Math.round(total * f)}s`))) : null; return { el: h("div", { class: "cwrap" }, h("div", { class: "cbar" }, i), marks), set(f) { i.style.width = Math.max(0, Math.min(1, f)) * 100 + "%"; i.className = f < 0.25 ? "low" : ""; } }; };
   const screen = (...k) => { const s = h("section", { class: "screen" }, ...k); root.append(s); return s; };
-  const statStrip = (a) => h("span", { class: "sstrip" }, ...P.engineStats(PK).map((st) => h("span", { class: "sp s-" + st.key }, tip(h("i", {}, st.abbr || st.label), st.description), h("b", {}, a[st.key]))), toughChip(a), ...traitPills(a, false));
+  const statStrip = (a) => PK.engine === "football" ? FBC.strip({ h, tip }, PK, a) : h("span", { class: "sstrip" }, ...P.engineStats(PK).map((st) => h("span", { class: "sp s-" + st.key }, tip(h("i", {}, st.abbr || st.label), st.description), h("b", {}, a[st.key]))), toughChip(a), ...traitPills(a, false));
   const uiCtx = {
     h, screen, arr, secs, toast, schedule, icon, bar, animalCard, statStrip, tip, S, N, R,
     nameOf, isHost, voterId, settings, leave: () => leave(),
@@ -291,17 +303,21 @@ async function main() {
     function drawOpts() {   // per-mode options chosen when the room is created (Pokémon war: auto or manual battles)
       const md = modeList().find((m) => m.id === modeSel.value) || modeList()[0]; optBox.replaceChildren(); for (const k of Object.keys(optSel)) delete optSel[k];
       for (const o of (md && md.createOptions) || []) { const sel = h("select", {}, o.options.map((x) => h("option", { value: x.v, selected: x.v === o.default }, x.l))); optSel[o.id] = sel; optBox.append(h("label", {}, o.label, sel)); }
-      modeInfo.textContent = (md && md.description) || "";
+      modeInfo.textContent = (md && md.description) || (PK.placeholder ? "Coming soon: this category has its look, but no playable mode yet." : "");
     }
     const modeInfo = h("p", { class: "muted small" });
     const tabs = h("div", { class: "vsel", role: "tablist", "aria-label": "Game version" }, PACKS.map((p) => h("button", { type: "button", role: "tab", class: "vtab" + (p.id === homePack ? " on" : ""), "data-pack": p.id, "aria-selected": String(p.id === homePack),
-      onclick: async () => {
+      onclick: async (ev) => {
+        const tabEl = ev && ev.currentTarget;
         if (p.id === homePack) return; homePack = p.id;
         tabs.querySelectorAll(".vtab").forEach((t) => { const on = t.dataset.pack === p.id; t.classList.toggle("on", on); t.setAttribute("aria-selected", String(on)); });
         const d = await loadPackData(homePack); document.body.classList.add("flash"); setTimeout(() => document.body.classList.remove("flash"), 450);
-        P.applyPack(d.pack); PK = d.pack; ENT = { list: d.list, map: d.map }; warm(d.list); document.title = d.pack.title;
-        glitchTo(heroEl.querySelector(".wordmark"), d.pack.title);
-        const n = hero(d.pack, d.list); heroEl.querySelector(".hero-art").replaceWith(n.querySelector(".hero-art")); heroEl.querySelector(".tagline").textContent = d.pack.tagline; drawModes();
+        PK = d.pack; ENT = { list: d.list, map: d.map };
+        const r = tabEl && tabEl.getBoundingClientRect ? tabEl.getBoundingClientRect() : null;
+        P.applyPack(d.pack, { animate: true, origin: r && { x: r.left + r.width / 2, y: r.top + r.height / 2 }, update: () => {   // runs inside the cross-fade, together with the glitch
+          glitchTo(heroEl.querySelector(".wordmark"), d.pack.title);
+          const n = hero(d.pack, d.list); heroEl.querySelector(".hero-art").replaceWith(n.querySelector(".hero-art")); heroEl.querySelector(".tagline").textContent = d.pack.tagline; drawModes();
+        } });
       } }, h("span", { class: "vicon" }, p.icon || "🎮"), h("b", {}, p.name), h("small", {}, p.blurb || ""))));
     drawModes();
     screen(heroEl,
@@ -309,6 +325,7 @@ async function main() {
       PACKS.length > 1 ? h("div", { class: "card vcard" }, h("label", {}, "Game"), tabs) : null,
       h("div", { class: "card" }, h("label", {}, "Mode", modeSel), modeInfo, optBox, h("label", {}, "Visibility", visSel), h("button", { class: "btn primary big", onclick: go(async () => {
         const n = need(), pk = await P.getPack(homePack), md = modeList().find((m) => m.id === modeSel.value) || modeList()[0];
+        if (!md) throw new Error("This category is coming soon: no game mode is playable for it yet.");
         const extra = {}; for (const [k, el] of Object.entries(optSel)) extra[k] = el.value;
         const code = await N.createRoom(n, JSON.parse(JSON.stringify({ ...R.DEFAULT_SETTINGS, ...(md.defaultSettings || {}), ...extra, filters: P.defaultFilters(pk) })), { pack: pk.id, mode: md.id, visibility: visSel.value }); await enter(code, "player", n); }) }, "Create room")),
       h("div", { class: "card" }, h("label", {}, "Room code"), codeIn, h("div", { class: "row" },
@@ -341,7 +358,7 @@ async function main() {
     const push = () => { clearTimeout(pending); pending = setTimeout(async () => { pending = null; try { await N.put(S.code, "meta/settings", L); } catch (e) { toast(e.message); } }, 250); };
     const edit = (fn) => { if (!isHost()) return; fn(L); push(); refresh(); };
     const num = (key, min, max) => h("input", { type: "number", min, max, onchange: (e) => edit((s) => { s[key] = Math.max(min, Math.min(max, Math.floor(+e.target.value) || min)); }) });
-    const inBal = num("startBalance", 10, 100000), inRos = num("rosterSize", R.ROSTER_MIN, R.ROSTER_MAX), inSec = num("auctionSeconds", 5, 120), inStall = num("stallLimit", R.STALL_MIN, R.STALL_MAX);
+    const inBal = num("startBalance", 10, 100000), inRos = num("rosterSize", (MD.rosterRange || {}).min ?? R.ROSTER_MIN, (MD.rosterRange || {}).max ?? R.ROSTER_MAX), inSec = num("auctionSeconds", 5, 120), inStall = num("stallLimit", R.STALL_MIN, R.STALL_MAX);
     const cbMystery = h("input", { type: "checkbox", onchange: (e) => edit((s) => { s.mysteryTraits = e.target.checked; }) });
     const selMode = h("select", { onchange: (e) => { if (isHost()) N.put(S.code, "meta/mode", e.target.value).catch((er) => toast(er.message)); } }, M.modesFor(MODES, PK).map((m) => h("option", { value: m.id }, M.titleOf(m, PK))));
     const modeDesc = h("p", { class: "muted small" }, MD.description || "");
@@ -429,7 +446,7 @@ async function main() {
     const skipBtn = h("button", { class: "btn", onclick: doSkip }, "Skip");
     const claimBtn = h("button", { class: "btn primary", onclick: async () => { const ok = await N.claimFree(S.code, S.key); if (!ok) toast("Too late to claim."); } }, "Claim free");
     const bidBox = h("div", { class: "card bidbox" }, h("div", { class: "quickrow" }, quick("+1", () => topAmt() + 1), quick("+5", () => topAmt() + 5), quick("+10", () => topAmt() + 10), quick("Max", () => +bidIn.max)), h("div", { class: "bidrow" }, bidIn, bidBtn, skipBtn));
-    const claimBox = h("div", { class: "card claimbox" }, h("p", { class: "small" }, "You are the last one left: claim it free, or skip."), h("div", { class: "row" }, claimBtn, h("button", { class: "btn", onclick: doSkip }, "Skip")));
+    const claimBox = h("div", { class: "card claimbox" }, h("p", { class: "small" }, ""), h("div", { class: "row" }, claimBtn, h("button", { class: "btn", onclick: doSkip }, "Skip")));
     const idleBox = h("div", { class: "idlebox" }, "Your bid controls appear here");
     const slot = h("div", { class: "actionslot" }, bidBox, claimBox, idleBox);
     const tbl = h("div", { class: "card d-tbl" }), logBox = h("div", { class: "card d-log" }), rosters = h("div", { class: "card d-ros" });
@@ -444,9 +461,10 @@ async function main() {
       update() {
         const L = S.ledger || {}, G = S.game || {}, st = settings(), A = S.auction, me = S.key, bal = L.balances || {}, ros = L.rosters || {};
         const active = A && !A.resolved && A.id === (L.drawIndex || 0), a = A && ENT.map.get(A.animalId);
+        { const pool = arr(G.pool), di = L.drawIndex || 0; preload(pool.slice(di, di + 4).map((id) => cardImage(PK, ENT.map.get(id)))); }   // the current lot first, then the next three: ready before they are dealt
         if (A && A.id !== lastId) { lastId = A.id; barMax = Math.max(1000, A.deadline - N.now()); bidTouched = false; }
         topInfo.replaceChildren(h("div", { class: "lotbar" }, h("span", { class: "lotno" }, `Lot ${Math.min((L.drawIndex || 0) + 1, arr(G.pool).length)} of ${arr(G.pool).length}`), L.stall ? h("span", { class: "pill" }, `${L.stall} of ${settings().stallLimit ?? R.STALL_LIMIT} unsold in a row`) : null),
-          S.role === "player" ? h("div", { class: "purse" }, h("b", {}, `$${bal[me] ?? 0}`), h("span", { class: "muted" }, `left, roster ${arr(ros[me]).length} of ${st.rosterSize}`)) : h("div", { class: "pill" }, "spectating"));
+          S.role === "player" ? h("div", { class: "purse" }, h("b", {}, `$${bal[me] ?? 0}`), h("span", { class: "muted" }, `left, roster ${arr(ros[me]).length} of ${st.rosterSize}`)) : h("div", { class: "pill" }, "spectating"), S.role === "player" && PK.draftTip ? h("p", { class: "fb-tip" }, PK.draftTip(arr(ros[me]).map((x) => ENT.map.get(x.id)).filter(Boolean), st.rosterSize)) : null);
         const sold = A && A.resolved && A.outcome && A.outcome.winner ? ENT.map.get(A.outcome.animalId) : null;   // mystery traits: the bought animal is shown once with its traits revealed
         cardBox.replaceChildren(active && a ? animalCard(a, false, null, !!st.mysteryTraits) : sold && st.mysteryTraits ? animalCard(sold, false, null, false) : animalCard(null, false, A && A.resolved && A.outcome ? "Resolved…" : `Next ${PK.nouns.singular}…`));
         const isPart = !!(A && A.participants && A.participants[me]), elig = !!(A && A.eligible && A.eligible[me]), skipped = !!(A && A.skips && A.skips[me]), top = A && A.top;
@@ -477,7 +495,7 @@ async function main() {
         const entries = Object.entries(L.log || {}).sort((x, y) => +y[0] - +x[0]).slice(0, 8);
         logBox.replaceChildren(h("h3", {}, "Draft log"), ...entries.map(([, t]) => h("div", { class: "logline" + (t.startsWith("STALL") ? " stall" : "") }, t)));
         rosters.replaceChildren(h("h3", {}, "Rosters"), ...(G.keys ? arr(G.keys) : []).map((k) => h("details", { open: k === me }, h("summary", {}, `${nameOf(k)} (${arr(ros[k]).length})`),
-          ...arr(ros[k]).map((x) => { const an = ENT.map.get(x.id); return h("div", { class: "row between small" }, h("span", {}, an ? an.name : x.id), h("span", { class: "muted" }, x.price ? `$${x.price}` : "free")); }))));
+          ...arr(ros[k]).map((x) => { const an = ENT.map.get(x.id); return h("div", { class: "row between small" }, h("span", {}, an && PK.rosterTag ? [h("span", { class: "pill rtag" }, PK.rosterTag(an)), " "] : null, an ? an.name : x.id), h("span", { class: "muted" }, x.price ? `$${x.price}` : "free")); }))));
       }
     };
   };
@@ -541,7 +559,7 @@ async function main() {
           const sub = S.lineups && S.lineups[S.key] ? arr(S.lineups[S.key].order) : [];
           order = sub.length === mine.length && [...sub].sort().join() === [...mine].sort().join() ? sub : mine.slice(); draw();
         }
-        if (isP && !mine.length) rowsBox.replaceChildren(h("p", { class: "muted" }, "`You drafted no ${PK.nouns.plural}, so you sit out the tournament.`"));
+        if (isP && !mine.length) rowsBox.replaceChildren(h("p", { class: "muted" }, `You drafted no ${PK.nouns.plural}, so you sit out the tournament.`));
         const ready = S.lineups || {}; status.replaceChildren(h("h3", {}, "Players"), ...arr(S.game && S.game.keys).map((k) => h("div", { class: "row between" }, nameOf(k), h("span", { class: "muted" }, ready[k] && ready[k].done ? "ready" : "arranging…"))));
         readyBtn.textContent = S.lineups && S.lineups[S.key] && S.lineups[S.key].done ? "Ready (tap to change)" : "Ready";
       }
