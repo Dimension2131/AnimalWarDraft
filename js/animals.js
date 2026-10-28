@@ -76,3 +76,5 @@ export async function loadPackData(id) {
   })());
   return cache.get(pack.id);
 }
+
+// (No top-level await any more: it blocked every importer of this module until the default pack had fully loaded.)
