@@ -21,10 +21,10 @@ export function teamsOfFight(map, T, f, names) {
 }
 export const simOf = (map, T, f, names) => E.simulateMatch({ teams: teamsOfFight(map, T, f, names), seed: seedOf(f), discipline: !!f.disc });
 // The whole plan of a match: outcome (simulation), the penalty shoot-out when a knockout match is level, and the choreography. Every device builds the same one from the same record.
-export function planOf(map, T, f, names) {
+export function planOf(map, T, f, names, speed) {   // speed overrides the match's own preset (the team stats always use the Full film so every preset shows the same numbers)
   const teams = teamsOfFight(map, T, f, names), sim = E.simulateMatch({ teams, seed: seedOf(f), discipline: !!f.disc });
   const pens = f.ko && sim.winner === "draw" ? E.shootout({ teams, seed: seedOf(f), onPitch: sim.onPitch }) : null;
-  return { teams, sim, pens, M: C.buildMatch({ teams, sim, seed: seedOf(f), speed: f.speed, pens }) };
+  return { teams, sim, pens, M: C.buildMatch({ teams, sim, seed: seedOf(f), speed: speed || f.speed, pens }) };
 }
 
 export function createHost(ctx) {
@@ -83,8 +83,8 @@ export function createHost(ctx) {
       const f = T.fights[id]; if (!f || f.final) continue;
       if (!cache[f.id]) cache[f.id] = planOf(map, T, f, [nm(f.a), nm(f.b)]);
       const plan = cache[f.id];
-      // the match ends at its natural end, or as soon as both managers have skipped to full time (an offline manager does not hold it up). The skip flag lives in the manager's own lineups node: lineups/<key>/skip = fight id.
-      const done = (k) => ((S.lineups || {})[k] || {}).skip === f.id || !((S.players || {})[k] || {}).online;
+      // the match ends at its natural end, or as soon as both managers have skipped to full time (an offline manager does not hold it up). The skip flag lives in the manager's own lineups node: lineups/<key>/skip = "<fight id>:<fight seed>".
+      const token = `${f.id}:${f.seed}`, done = (k) => ((S.lineups || {})[k] || {}).skip === token || !((S.players || {})[k] || {}).online;   // the token holds the match's own random seed: a skip left over from an earlier tournament ("Play again, same team" keeps the lineups) can never match a new match with the same id
       if (N.now() >= f.startAt + endMs(plan.M) || (N.now() >= f.startAt && plan.M.animated && done(f.a) && done(f.b))) return finishFight(f, plan);
     }
   }

@@ -24,7 +24,7 @@ const fl = Math.floor, clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 // ---------- what is implemented ----------
 const LOCK = new Set(["outrage", "thrash", "petal-dance", "raging-fury"]);
 export const STAT_IDS = { 2: "atk", 3: "def", 4: "spa", 5: "spd", 6: "spe", 7: "acc", 8: "eva" };
-const STAT_NAME = { atk: "Attack", def: "Defense", spa: "Sp. Atk", spd: "Sp. Def", spe: "Speed", acc: "accuracy", eva: "evasiveness" };
+const STAT_NAME = { atk: "Attack", def: "Defense", spa: "Special Attack", spd: "Special Defense", spe: "Speed", acc: "accuracy", eva: "evasiveness" };
 const SUP_AIL = new Set(["paralysis", "sleep", "freeze", "burn", "poison", "confusion", "leech-seed", "trap", "yawn"]);
 const CURATED = new Set(["protect", "detect", "spiky-shield", "kings-shield", "baneful-bunker", "obstruct", "silk-trap", "burning-bulwark", "substitute", "rain-dance", "sunny-day", "sandstorm", "hail", "snowscape",
   "reflect", "light-screen", "aurora-veil", "stealth-rock", "spikes", "toxic-spikes", "sticky-web", "trick-room", "rest", "haze", "belly-drum", "focus-energy", "toxic", "metronome", "taunt", "tailwind"]);
@@ -241,7 +241,7 @@ function stage(S, si, m, k, d, src, fromAbility) {
   m.stg[k] = nx; say(S, `${m.name}'s ${STAT_NAME[k]} ${stageText(nx - cur)}`); emit(S, { e: "stage", s: si, k, d: nx - cur });
   if (d < 0 && foeSrc && !m.fnt) {
     if (m.ab === "defiant") { say(S, `${m.name}'s Defiant sharply raises its Attack!`); stage(S, si, m, "atk", 2, m); }
-    if (m.ab === "competitive") { say(S, `${m.name}'s Competitive sharply raises its Sp. Atk!`); stage(S, si, m, "spa", 2, m); }
+    if (m.ab === "competitive") { say(S, `${m.name}'s Competitive sharply raises its Special Attack!`); stage(S, si, m, "spa", 2, m); }
   }
   return true;
 }

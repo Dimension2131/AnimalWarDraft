@@ -82,6 +82,24 @@ const CSS = `
 .fb-brm.me{border-left-color:var(--yellow,#ffe14d)}.fb-brm b.win{color:var(--yellow,#ffe14d)}
 .fb-tick{padding:4px 0;gap:8px;flex-wrap:wrap}.fb-tick.me{font-weight:700}
 .fb-rank{margin:6px 0;padding-left:1.4rem}
+.fb-stats{margin:8px 0;background:var(--sheet,#0e2317);padding:10px 8px;border:2px solid var(--edge,#ccc)}
+.fb-st-head{display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:start;margin-bottom:8px}
+.fb-st-team{min-width:0}.fb-st-name{display:block;text-align:center;margin-bottom:4px}
+.fb-st-icons{display:grid;grid-template-columns:repeat(auto-fill,minmax(46px,1fr));gap:4px 2px}
+.fb-st-pl{display:flex;flex-direction:column;align-items:center;min-width:0;font-size:.62rem;line-height:1.1;text-align:center}
+.fb-st-pl>:first-child{width:34px;height:34px;object-fit:cover;border-radius:50%}
+.fb-st-pl span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fb-st-mid{text-align:center;padding:0 4px}.fb-st-title{font:700 .8rem var(--display,inherit);letter-spacing:.08em}
+.fb-st-score{font:800 1.5rem var(--display,inherit);margin-top:4px}
+.fb-st-row{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:5px 0;text-align:center}
+.fb-st-lab{padding:0 10px;min-width:8.5rem}
+.fb-st-v{justify-self:center;min-width:2.6rem;padding:2px 10px;border-radius:99px}
+.fb-st-v.lead{color:#fff;font-weight:700}
+.fb-st-tabs{gap:6px;margin:6px 0}
+.fb-live{margin-top:8px}
+.fb-live .fb-stats{margin:0}
+.fb-live .fb-st-pl>:first-child{width:28px;height:28px}
+@media (max-width:520px){.fb-st-icons{grid-template-columns:repeat(4,1fr)}.fb-st-lab{min-width:5.5rem;font-size:.82rem}.fb-st-pl>:first-child{width:30px;height:30px}}
 @keyframes fb-in{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
 @keyframes fb-pop{0%{transform:scale(.4);opacity:0}70%{transform:scale(1.15);opacity:1}100%{transform:scale(1)}}
 @media (prefers-reduced-motion:reduce){.fb-card,.fb-pop{animation:none}}

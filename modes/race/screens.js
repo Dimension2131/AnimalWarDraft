@@ -176,13 +176,14 @@ export default function createScreens(ctx) {
 
   // ================= RESULTS =================
   function resultsScreen() {
-    const box = h("div"), detail = h("div", { class: "card scroll" });
-    screen(h("h1", {}, "Race results"), box, detail, h("div", { class: "row" },
+    const box = h("div"), detail = h("div", { class: "card scroll" }), again = ctx.playAgainBar({ same: true });
+    screen(h("h1", {}, "Race results"), box, detail, again.el, h("div", { class: "row" },
       h("button", { class: "btn", onclick: () => { ctx.leave().then(() => { S.view = "leaderboard"; ctx.schedule(); }); } }, "Leaderboard"),
       h("button", { class: "btn primary", onclick: () => ctx.leave() }, "Leave room")));
     let sig = "";
     return {
       update() {
+        again.update();
         const T = S.tour;
         if (!isRace(T)) { box.replaceChildren(h("p", { class: "muted center" }, "No race was recorded.")); detail.replaceChildren(); return; }
         const res = simFor(T), r = T.result, winner = arr(r.order)[0];

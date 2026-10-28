@@ -105,7 +105,7 @@ export function buildMatch({ teams, sim, seed, speed, pens }) {
     const nearestSlot = (x, pt) => { let bi = -1, bd = 1e9; for (const i of outfield(x)) { const d = dist(posP(x, i), pt); if (d < bd) { bd = d; bi = i; } } return bi >= 0 ? bi : outfield(x)[0] || 1; };
     const holderRef = () => (st.hs >= 0 && on[st.poss][st.hs] ? { s: st.poss, i: st.hs } : null);
     // ---- commentary context: the clock, the score, shots and possession so far, who is speaking about whom ----
-    const pk = makePicker(), gs = { m: 0, score: [0, 0], shots: [0, 0] }, posMs = [0, 0];
+    const pk = makePicker(), gs = { m: 0, score: [0, 0], shots: [0, 0] }, posMs = [0, 0], stat = [0, 1].map(() => ({ passes: 0, turn: 0, fouls: 0, corners: 0, throws: 0, offsides: 0 })), bump = (b, s, k) => { stat[s][k]++; b.stats.push({ t: b.t, s, k }); };   // counted from the film itself, with the moment each one happened: the team stats (live and final) read these
     const who = (s, i) => nm(s, i) || "the player", traitAt = (s, i) => traitOf(ents.get(on[s][i]));
     const poss = () => { const t = posMs[0] + posMs[1]; return t ? [(posMs[0] / t) * 100, (posMs[1] / t) * 100] : [50, 50]; };
     const X = (s, extra = {}) => ({ team: names[s], opp: names[1 - s], nameA: names[0], nameB: names[1], m: Math.floor(gs.m), score: gs.score, diff: gs.score[s] - gs.score[1 - s], shots: gs.shots, poss: poss(), ...extra });
@@ -206,9 +206,9 @@ export function buildMatch({ teams, sim, seed, speed, pens }) {
 
     // a builder collects the legs and commentary of one segment; leg() runs the simulation for it
     function builder(rnd) {
-      const legs = [], lines = [], kicks = []; let t = 0, mark = -1;
+      const legs = [], lines = [], kicks = [], stats = []; let t = 0, mark = -1;
       const b = {
-        legs, lines, kicks, rnd,
+        legs, lines, kicks, stats, rnd,
         get t() { return t; }, get mark() { return mark; },
         leg(kind, to, o = {}) {
           const hf = o.hf !== undefined ? o.hf : holderRef(), ht = o.ht !== undefined ? o.ht : null;
@@ -245,7 +245,7 @@ export function buildMatch({ teams, sim, seed, speed, pens }) {
           else if (o.ht !== undefined) { if (o.ht) { st.poss = o.ht.s; st.hs = o.ht.i; } else st.hs = -1; }
           return b;
         },
-        say(text, cls, prob, hype) { if (prob === undefined || rnd() < prob) lines.push({ t, text, cls: cls || "", hype: hype || 0 }); return b; },
+        say(text, cls, prob, hype) { const kind = pk.key; pk.key = ""; if ((prob === undefined || rnd() < prob) && text && text !== gs.lastText) { gs.lastText = text; lines.push({ t, text, cls: cls || "", hype: hype || 0, kind }); } return b; },   // kind = which phrase pool the line came from (the commentator's voice decides how interesting and in what tone to say it)
         markNow() { mark = t; return b; }
       };
       return b;
@@ -265,7 +265,7 @@ export function buildMatch({ teams, sim, seed, speed, pens }) {
         const t0 = toTeam(G(s), ballP()[0], ballP()[1]), t1 = toTeam(G(s), to[0], to[1]), kind = o.how || (t1[0] - t0[0] < -0.06 ? "back" : Math.abs(t1[1] - t0[1]) > 0.3 ? "wide" : d > 28 ? "long" : t1[0] - t0[0] > 0.12 ? "forward" : "short");
         b.say(W.pass(pk, b.rnd, X(s, { a: who(s, st.hs), b: who(s, r), kind, side: t1[1] < 0.5 ? "left" : "right" })), "", o.say, 0);
       }
-      b.leg(o.kind || "pass", to, { ht: { s, i: r }, z: o.z != null ? o.z : d > 30 ? 0.55 : d > 17 ? 0.25 : 0 });
+      bump(b, s, "passes"); b.leg(o.kind || "pass", to, { ht: { s, i: r }, z: o.z != null ? o.z : d > 30 ? 0.55 : d > 17 ? 0.25 : 0 });
       return r;
     }
     function carry(b, want, how) { if (st.hs < 0) return; if (how) b.say(W[how === "dribble" ? "dribble" : how === "solo" ? "solo" : "carry"](pk, b.rnd, X(st.poss, { a: who(st.poss, st.hs), trait: traitAt(st.poss, st.hs) })), "", 1, how === "solo" ? 1 : 0); b.leg("carry", want, { ht: { s: st.poss, i: st.hs } }); }
@@ -274,7 +274,7 @@ export function buildMatch({ teams, sim, seed, speed, pens }) {
       const bp = ballP(); let best = -1, bs = 1e9; for (const i of outfield(s)) { const d = dist(posP(s, i), bp); if (d < bs) { bs = d; best = i; } }
       if (best < 0) best = 0;
       b.say(W[why === "int" ? "intercept" : "tackle"](pk, b.rnd, X(s, { a: who(s, best) })), "", 1, 0);
-      if (st.hs >= 0) b.leg("tackle", bp, { rc: { s, i: best } }); else b.leg("fetch", bp, { hf: null, ht: { s, i: best } });
+      if (st.hs >= 0) { bump(b, st.poss, "turn"); b.leg("tackle", bp, { rc: { s, i: best } }); } else b.leg("fetch", bp, { hf: null, ht: { s, i: best } });
     }
     function distribute(b, s) {   // the keeper gets the ball (he already has it after a save), walks it to his box and kicks long
       if (!(st.poss === s && st.hs === 0)) b.leg("fetch", ballP(), { hf: null, ht: { s, i: 0 } });
@@ -308,8 +308,8 @@ export function buildMatch({ teams, sim, seed, speed, pens }) {
       if (e.e === "chance") {   // an attack that dies: a defender runs across and blocks
         passTo(b, -1, A(s, 0.8, 0.3 + rnd() * 0.4), { excl: [] });
         const defs = onLine(o, "DEF"); let di = defs.length ? defs[0] : 1, bd = 1e9; defs.forEach((i) => { const d = dist(posP(o, i), ballP()); if (d < bd) { bd = d; di = i; } });
-        b.say(W.block(pk, rnd, X(s, { a: who(o, di) })), "", 1, H(1));
-        b.leg("tackle", ballP(), { rc: { s: o, i: di } }).markNow();
+        b.say(W.block(pk, rnd, X(s, { a: who(o, di) })), "", 1, H(1)); b.say(W.react(pk, rnd, { k: "block" }), "", 0.5, H(1));
+        bump(b, s, "turn"); b.leg("tackle", ballP(), { rc: { s: o, i: di } }).markNow();
         const mids = onLine(o, "MID"); passTo(b, mids.length ? mids[Math.floor(rnd() * mids.length)] : -1, A(o, 0.5, 0.2 + rnd() * 0.6), { z: 0.5 });
         return b;
       }
@@ -330,9 +330,9 @@ export function buildMatch({ teams, sim, seed, speed, pens }) {
         b.say(W.goal(pk, rnd, X(s, { a: shootName, b: as >= 0 ? nm(s, as) : e.an || "", flavour: fl, diffBefore: gs.score[s] - gs.score[1 - s], first: gs.score[0] + gs.score[1] === 0, score: e.score, m: e.m })), "goal", 1, 3);
       } else if (e.e === "save") {
         b.leg("shot", [kx, yT], { ht: { s: o, i: 0 }, z: 0.2, pulls: [{ s: o, i: 0, to: [kx, yT], v: 7.5 }] }).markNow();
-        b.say(W.save(pk, rnd, X(s, { a: shootName, gk: nm(o, 0) || "the keeper" })), "save", 1, H(2));
+        b.say(W.save(pk, rnd, X(s, { a: shootName, gk: nm(o, 0) || "the keeper" })), "save", 1, H(2)); b.say(W.react(pk, rnd, { k: "save" }), "", 0.6, H(1));
         if (rnd() < 0.4) {   // parried behind: corner
-          const flag = [lineX, rnd() < 0.5 ? 0.02 : 0.98];
+          const flag = [lineX, rnd() < 0.5 ? 0.02 : 0.98]; bump(b, s, "corners");
           b.leg("out", flag, { hf: { s: o, i: 0 }, ht: null, z: 0.2 }); b.say(W.corner(pk, rnd, X(s, { a: who(s, nearestSlot(s, flag)) })), "", 0.9, 1);
           let tk = 1, tkd = 1e9; outfield(s).forEach((i) => { const d = dist(posP(s, i), flag); if (d < tkd) { tkd = d; tk = i; } }); st.set = boxPulls(s, tk);
           b.leg("fetch", flag, { hf: null, ht: { s, i: tk } }); b.leg("hold", flag, { dur: 700, hf: { s, i: tk }, ht: { s, i: tk } });
@@ -344,7 +344,7 @@ export function buildMatch({ teams, sim, seed, speed, pens }) {
       } else {
         const hi = rnd() < 0.4;
         b.leg("shot", [lineX + deep * 6, hi ? 0.5 + side * 0.03 : clamp(0.5 + side * (0.1 + rnd() * 0.06), 0.1, 0.9)], { ht: null, z: hi ? 0.95 : 0.2 }).markNow();
-        b.say(W.miss(pk, rnd, X(s, { a: shootName, high: hi })), "miss", 1, H(1));
+        b.say(W.miss(pk, rnd, X(s, { a: shootName, high: hi })), "miss", 1, H(1)); b.say(W.react(pk, rnd, { k: "miss" }), "", 0.7, H(1));
         distribute(b, o);
       }
       return b;
@@ -361,11 +361,11 @@ export function buildMatch({ teams, sim, seed, speed, pens }) {
     // ---- quiet play between events ----
     function filler(rnd) {
       const b = builder(rnd), fastP = sp === "fast";
-      const roll = rnd(); let kind = roll < 0.5 ? "pass" : roll < 0.64 ? "counter" : roll < 0.8 ? "throw" : roll < 0.92 ? "foul" : "corner";
+      const roll = rnd(); let kind = roll < 0.34 ? "pass" : roll < 0.45 ? "counter" : roll < 0.56 ? "throw" : roll < 0.82 ? "foul" : roll < 0.92 ? "corner" : "offside";
       if (st.hs < 0) kind = "pass";
-      if (rnd() < 0.27) {   // the co-commentator chips in: possession, shots, the state of the game, a word about a player
+      if (rnd() < 0.34) {   // the co-commentator chips in: possession, shots, the state of the game, a word about a player
         const q = rnd(), s0 = st.poss, hs0 = st.hs >= 0 ? st.hs : nearestSlot(s0, ballP()), tt = traitAt(s0, hs0);
-        const line = q < 0.28 ? W.possession(pk, rnd, X(s0)) : q < 0.5 ? W.shots(pk, rnd, X(s0)) : q < 0.78 || !tt ? W.state(pk, rnd, X(s0)) : W.trait(pk, rnd, X(s0, { a: who(s0, hs0), t: tt }));
+        const line = q < 0.2 ? W.possession(pk, rnd, X(s0)) : q < 0.34 ? W.shots(pk, rnd, X(s0)) : q < 0.54 ? W.state(pk, rnd, X(s0)) : q < 0.82 || !tt ? W.remark(pk, rnd, X(s0)) : W.trait(pk, rnd, X(s0, { a: who(s0, hs0), t: tt }));
         b.say(line, "", 1, 0);
       }
       const nearest = (x, pt, pred) => { let bi = -1, bd = 1e9; for (const i of outfield(x)) { if (pred && !pred(i)) continue; const d = dist(posP(x, i), pt); if (d < bd) { bd = d; bi = i; } } return bi >= 0 ? bi : outfield(x)[0] || 1; };
@@ -385,11 +385,11 @@ export function buildMatch({ teams, sim, seed, speed, pens }) {
             if (rnd() < 0.18 && st.hs > 0) carry(b, want, rnd() < 0.5 ? "dribble" : null);
             else passTo(b, -1, want, { excl: [], say: P.say * 0.9 });
           }
-          if (rnd() < 0.4) { const x = 1 - s, bi = nearest(x, ballP()); b.say(W.press(pk, rnd, X(x, { a: who(x, bi) })), "", 0.8, 0); b.leg("tackle", ballP(), { rc: { s: x, i: bi } }); }
+          if (rnd() < 0.4) { const x = 1 - s, bi = nearest(x, ballP()); b.say(W.press(pk, rnd, X(x, { a: who(x, bi) })), "", 0.8, 0); bump(b, 1 - x, "turn"); b.leg("tackle", ballP(), { rc: { s: x, i: bi } }); }
         }
       } else if (kind === "throw") {
         const lost = st.poss, s = 1 - lost, y = ballP()[1] < 0.5 ? 0.0 : 1.0, bx = clamp(ballP()[0] + (rnd() - 0.5) * 0.08, 0.05, 0.95), spot = [bx, y];
-        b.leg("out", spot, { ht: null, z: 0.15 }); b.say(W.throwin(pk, rnd, X(s, { a: who(s, nearest(s, spot)) })), "", 0.9, 0);
+        bump(b, s, "throws"); b.leg("out", spot, { ht: null, z: 0.15 }); b.say(W.throwin(pk, rnd, X(s, { a: who(s, nearest(s, spot)) })), "", 0.9, 0);
         const tk = nearest(s, spot); st.poss = s; st.hs = -1;
         b.leg("fetch", spot, { hf: null, ht: { s, i: tk } }); b.leg("hold", spot, { dur: 600, hf: { s, i: tk }, ht: { s, i: tk } });
         passTo(b, -1, [clamp(bx + (rnd() - 0.5) * 0.14, 0.05, 0.95), y === 0 ? 0.14 : 0.86], { z: 0.2, excl: [] });
@@ -398,12 +398,18 @@ export function buildMatch({ teams, sim, seed, speed, pens }) {
         carry(b, jit(rnd, A(s, clamp(toTeam(G(s), ballP()[0], ballP()[1])[0] + 0.1, 0.3, 0.75), ballP()[1]), 0.04), null);
         const df = nearest(o, ballP());
         b.say(W.foul(pk, rnd, X(s, { a: who(s, h), b: who(o, df) })), "", 1, 0);
-        b.leg("tackle", ballP(), { rc: { s: o, i: df }, keep: true }); b.leg("hold", ballP(), { dur: 1100 });
+        bump(b, o, "fouls"); b.leg("tackle", ballP(), { rc: { s: o, i: df }, keep: true }); b.leg("hold", ballP(), { dur: 1100 });
         passTo(b, -1, A(s, clamp(toTeam(G(s), ballP()[0], ballP()[1])[0] + 0.12, 0.3, 0.8), 0.2 + rnd() * 0.6), { z: 0.5 });
+      } else if (kind === "offside") {   // a through ball to a run that started a fraction too early: the flag goes up, the other side takes the free kick
+        const s = st.poss, o = 1 - s;
+        passTo(b, -1, A(s, 0.6, 0.3 + rnd() * 0.4), { excl: [] });
+        const fw = onLine(s, "FWD").filter((i) => i !== st.hs), rcv = fw.length ? fw[Math.floor(rnd() * fw.length)] : -1;
+        passTo(b, rcv, A(s, 0.88, 0.3 + rnd() * 0.4), { z: 0 }); b.say(W.offside(pk, rnd, X(s, { a: who(s, st.hs) })), "", 1, 1);
+        bump(b, s, "offsides"); b.leg("hold", ballP(), { dur: 1300 }); b.leg("fetch", ballP(), { hf: null, ht: { s: o, i: nearest(o, ballP()) } });
       } else {   // corner
         const s = st.poss, o = 1 - s, flag = [G(s) === 0 ? 1 : 0, rnd() < 0.5 ? 0.02 : 0.98];
         if (toTeam(G(s), ballP()[0], ballP()[1])[0] < 0.78) passTo(b, -1, A(s, 0.84, flag[1] < 0.5 ? 0.18 : 0.82), { excl: [] });
-        b.leg("out", flag, { ht: null, z: 0.2 }); b.say(W.corner(pk, rnd, X(s, { a: who(s, nearest(s, flag)) })), "", 1, 1);
+        bump(b, s, "corners"); b.leg("out", flag, { ht: null, z: 0.2 }); b.say(W.corner(pk, rnd, X(s, { a: who(s, nearest(s, flag)) })), "", 1, 1);
         const tk = nearest(s, flag); st.set = boxPulls(s, tk);
         b.leg("fetch", flag, { hf: null, ht: { s, i: tk } }); b.leg("hold", flag, { dur: 700, hf: { s, i: tk }, ht: { s, i: tk } });
         const fw = onLine(s, "FWD").concat(onLine(s, "DEF")), ai = fw.length ? fw[Math.floor(rnd() * fw.length)] : 1;
@@ -417,7 +423,7 @@ export function buildMatch({ teams, sim, seed, speed, pens }) {
     let lastM = 0, lastEvM = 0;
     const finish = (b, o) => {   // turn a builder into a segment
       const nat = Math.max(1, b.t);
-      segs.push({ id: segs.length, cls: o.cls, kind: o.kind, ei: o.ei != null ? o.ei : -1, nat, w: o.w || 1, legs: b.legs, lines: b.lines, kicks: b.kicks, m0: o.m0, m1: o.m1, fm: o.fm != null ? o.fm : b.mark >= 0 ? clamp(b.mark / nat, 0.05, 1) : 1, on0: o.on0 || cloneOn(), on1: o.on1 || cloneOn(), flip: o.flip != null ? o.flip : 0, card: o.card ? { ...o.card, ff: o.ff != null ? Math.min(1, o.ff / nat) : null } : null, pen: null });
+      segs.push({ id: segs.length, cls: o.cls, kind: o.kind, ei: o.ei != null ? o.ei : -1, nat, w: o.w || 1, legs: b.legs, lines: b.lines, kicks: b.kicks, stats: b.stats, m0: o.m0, m1: o.m1, fm: o.fm != null ? o.fm : b.mark >= 0 ? clamp(b.mark / nat, 0.05, 1) : 1, on0: o.on0 || cloneOn(), on1: o.on1 || cloneOn(), flip: o.flip != null ? o.flip : 0, card: o.card ? { ...o.card, ff: o.ff != null ? Math.min(1, o.ff / nat) : null } : null, pen: null });
     };
     function fillGap(toM, share, fillRng) {
       if (!fillNat || toM - lastM < 0.4) return;
@@ -466,7 +472,7 @@ export function buildMatch({ teams, sim, seed, speed, pens }) {
       }
       lastM = Math.max(lastM, m1); lastEvM = e.m; gs.score = e.score.slice(); if (e.s != null && ["goal", "save", "miss", "chance"].includes(e.e)) gs.shots[e.s]++;
     });
-    return { segs, finalOn: on, simU, trk: record ? { dt: DT, n: HS.length, PS: Float32Array.from(PS), BS: Float32Array.from(BS), HS: Int8Array.from(HS), CUT: Uint8Array.from(CUT) } : null };
+    return { segs, finalOn: on, simU, stat, posMs, trk: record ? { dt: DT, n: HS.length, PS: Float32Array.from(PS), BS: Float32Array.from(BS), HS: Int8Array.from(HS), CUT: Uint8Array.from(CUT) } : null };
   }
 
   // ---- pass 1 (no filler) measures the fixed and key time; pass 2 fills the quiet spells to the target and the final scale is solved exactly ----
@@ -494,15 +500,15 @@ export function buildMatch({ teams, sim, seed, speed, pens }) {
 
   // ---- moments (the outcome events at their real times) and the commentary feed ----
   const moments = [], lines = [];
-  segs.forEach((g) => { if (g.ei >= 0 && g.kind !== "celebrate") { const e = ev[g.ei]; moments.push({ ei: g.ei, e: e.e, m: e.m, s: e.s, p: e.p, pn: e.pn, an: e.an, score: e.score.slice(), r: g.r0 + g.real * g.fm }); } });
-  segs.forEach((g) => g.lines.forEach((L) => { const f = L.t / g.nat; lines.push({ r: g.r0 + g.real * f, m: Math.floor(minuteAt(g, f)), text: L.text, cls: L.cls, hype: L.hype || 0 }); }));
+  segs.forEach((g) => { if (g.ei >= 0 && g.kind !== "celebrate") { const e = ev[g.ei]; moments.push({ ei: g.ei, e: e.e, m: e.m, s: e.s, p: e.p, pn: e.pn, an: e.an, second: !!e.second, score: e.score.slice(), r: g.r0 + g.real * g.fm }); } });
+  segs.forEach((g) => g.lines.forEach((L) => { const f = L.t / g.nat; lines.push({ r: g.r0 + g.real * f, m: Math.floor(minuteAt(g, f)), text: L.text, cls: L.cls, hype: L.hype || 0, kind: L.kind || "" }); }));
 
   // ---- penalty shoot-out after full time ----
   let endAnim = total;
   if (pens) {
     const fin = g2.finalOn, mk = (kind, nat, extra) => ({ id: segs.length, cls: "pens", kind, ei: -1, nat, w: 1, legs: [], lines: [], m0: 90, m1: 90, fm: 1, on0: fin, on1: fin, flip: 0, card: null, pen: null, ...extra });
     const spotX = 1 - 11 / PITCH.L, intro = mk("penIntro", NAT.penIntro, { card: { type: "pens" } });
-    intro.legs.push({ t0: 0, t1: NAT.penIntro, kind: "hold", from: [spotX, 0.5], to: [spotX, 0.5], z: 0, side: 0, hf: null, ht: null, pulls: [] }); intro.lines.push({ t: 100, text: "Penalty shoot-out!", cls: "mark" }); segs.push(intro); addSeg(intro);
+    intro.legs.push({ t0: 0, t1: NAT.penIntro, kind: "hold", from: [spotX, 0.5], to: [spotX, 0.5], z: 0, side: 0, hf: null, ht: null, pulls: [] }); intro.lines.push({ t: 100, text: "Penalty shoot-out!", cls: "mark", hype: 2, kind: "pen" }); segs.push(intro); addSeg(intro);
     pens.kicks.forEach((k, ki) => {
       const s = k.s, i = fin[s].indexOf(k.p), gkS = 1 - s, ySide = k.res === "goal" ? (ki % 2 ? -1 : 1) * (0.02 + 0.02 * ((ki * 7) % 3)) : k.res === "save" ? (ki % 2 ? 1 : -1) * 0.035 : (ki % 2 ? -1 : 1) * 0.085;
       const target = k.res === "miss" ? [1.006, 0.5 + ySide] : [1.006, 0.5 + ySide], dive = k.res === "save" ? 0.5 + ySide : 0.5 - Math.sign(ySide || 1) * 0.04;
@@ -510,19 +516,24 @@ export function buildMatch({ teams, sim, seed, speed, pens }) {
       const legsRel = [["hold", 1700, [spotX, 0.5], [spotX, 0.5], 0], ["shot", 520, [spotX, 0.5], [k.res === "save" ? 0.99 : target[0], k.res === "save" ? 0.5 + ySide : target[1]], k.res === "miss" && ki % 3 === 0 ? 0.9 : 0.2], ["hold", NAT.pen - 2220, null, null, 0]];
       let t = 0, last = [spotX, 0.5]; legsRel.forEach(([kind, dur, from, to, z]) => { const f = from || last, tt = to || last; seg.legs.push({ t0: t, t1: t + dur, kind, from: f, to: tt, z, side: s, hf: null, ht: null, pulls: [] }); t += dur; last = tt; });
       const tn = names[s], gkn = nameOfId(fin[gkS][0]), txt = k.res === "goal" ? `${k.pn} scores! ${k.score[0]}-${k.score[1]}` : k.res === "save" ? `${gkn} saves from ${k.pn}! ${k.score[0]}-${k.score[1]}` : `${k.pn} misses! ${k.score[0]}-${k.score[1]}`;
-      seg.lines.push({ t: 150, text: `${k.pn} (${tn}) steps up…`, cls: "" }, { t: 1800, text: txt, cls: k.res === "goal" ? "goal" : "" }); seg.fm = 1900 / NAT.pen; seg.card = { type: "penKick", s, name: k.pn, res: k.res, id: k.p };
+      seg.lines.push({ t: 150, text: `${k.pn} (${tn}) steps up…`, cls: "", hype: 2, kind: "pen" }, { t: 1800, text: txt, cls: k.res === "goal" ? "goal" : "", hype: 3, kind: "pen" }); seg.fm = 1900 / NAT.pen; seg.card = { type: "penKick", s, name: k.pn, res: k.res, id: k.p };
       segs.push(seg); addSeg(seg); moments.push({ ei: -2, e: "pen", s, p: k.p, pn: k.pn, res: k.res, m: 120, score: sim.score.slice(), pens: k.score.slice(), r: seg.r0 + seg.real * seg.fm });
-      lines.push({ r: seg.r0 + seg.real * (150 / NAT.pen), m: 120, text: seg.lines[0].text, cls: "" }, { r: seg.r0 + seg.real * (1800 / NAT.pen), m: 120, text: txt, cls: k.res === "goal" ? "goal" : "" });
+      lines.push({ r: seg.r0 + seg.real * (150 / NAT.pen), m: 120, text: seg.lines[0].text, cls: "", hype: 2, kind: "pen" }, { r: seg.r0 + seg.real * (1800 / NAT.pen), m: 120, text: txt, cls: k.res === "goal" ? "goal" : "", hype: 3, kind: "pen" });
     });
     const endSeg = mk("penEnd", NAT.penEnd, { card: { type: "penEnd", winner: pens.winner, score: pens.score.slice() } });
     endSeg.legs.push({ t0: 0, t1: NAT.penEnd, kind: "hold", from: [spotX, 0.5], to: [spotX, 0.5], z: 0, side: 0, hf: null, ht: null, pulls: [] }); segs.push(endSeg); addSeg(endSeg);
-    lines.push({ r: endSeg.r0 + 200, m: 120, text: `${names[pens.winner]} win the shoot-out ${pens.score[0]}-${pens.score[1]}.`, cls: "mark" });
+    lines.push({ r: endSeg.r0 + 200, m: 120, text: `${names[pens.winner]} win the shoot-out ${pens.score[0]}-${pens.score[1]}.`, cls: "mark", hype: 3, kind: "penEnd" });
     endAnim = r;
   }
   moments.sort((a, b) => a.r - b.r); lines.sort((a, b) => a.r - b.r);
+  const statLog = [], possTrack = []; let pc0 = 0, pc1 = 0;   // every counted stat with the real time it happened, and the running possession at the end of every leg: the live stats are read off these
+  segs.forEach((g) => { (g.stats || []).forEach((q) => statLog.push({ r: g.r0 + g.real * (q.t / g.nat), s: q.s, k: q.k })); });
+  legs.forEach((L) => { const g = segs[L.seg]; if (!g || g.cls === "pens") return; const d = L.u1 - L.u0; if (L.side === 0) pc0 += d; else pc1 += d; possTrack.push({ r: g.r0 + g.real * ((L.u1 - g.u0) / g.nat), c0: pc0, c1: pc1 }); });
+  statLog.sort((a, b) => a.r - b.r);
   const kickoffs = []; segs.forEach((g) => (g.kicks || []).forEach((k) => kickoffs.push({ r: g.r0 + g.real * (k.t / g.nat), side: k.side, half: k.half, kind: k.kind })));
   const trk = g2.trk; let hash = trk.n | 0; for (let q = 0; q < trk.PS.length; q += 7) hash = (Math.imul(hash, 31) + Math.round(trk.PS[q] * 10)) | 0;
-  return { speed: sp, animated: true, names, preset: P, seed, segs, legs, moments, lines, kickoffs, trk, hash, simU: g2.simU, base: B, num, total, pensMs: endAnim - total, endAnim, end: endAnim, pens: pens || null, finalScore: sim.score.slice(), scales: sc, fixedNum: c2 };
+  const tp = g2.posMs[0] + g2.posMs[1], stats = { poss: tp ? [(g2.posMs[0] / tp) * 100, (g2.posMs[1] / tp) * 100] : [50, 50], passes: g2.stat.map((q) => q.passes), turnovers: g2.stat.map((q) => q.turn), fouls: g2.stat.map((q) => q.fouls), corners: g2.stat.map((q) => q.corners), throwIns: g2.stat.map((q) => q.throws), offsides: g2.stat.map((q) => q.offsides) };
+  return { speed: sp, animated: true, names, preset: P, seed, segs, legs, moments, lines, kickoffs, stats, statLog, possTrack, lineups: teams.map((t) => t.xi.filter(Boolean).map((p) => p.id)), trk, hash, simU: g2.simU, base: B, num, total, pensMs: endAnim - total, endAnim, end: endAnim, pens: pens || null, finalScore: sim.score.slice(), scales: sc, fixedNum: c2 };
 }
 
 // ---------- frames ----------

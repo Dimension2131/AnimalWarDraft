@@ -4,8 +4,10 @@
 import * as C from "./choreo.js";
 import * as E from "./engine.js";
 import { photo } from "./card.js";
+import { failed } from "../../js/preload.js";
 import { createVoice } from "./voice.js";
 import { createMusic } from "./music.js";
+import { liveStats, createStatsView } from "./stats.js";
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const rc = (el, ...kids) => el.replaceChildren(...kids.filter((k) => k != null && k !== false));
@@ -23,14 +25,17 @@ export function createViewer({ h, N, ent, onSkip }) {
   const clock = h("div", { class: "fb-clock" }), pensEl = h("div", { class: "fb-pens muted small center" }), log = h("div", { class: "fb-log", "aria-live": "polite" });
   const canvas = reduced ? null : h("canvas", { class: "fb-canvas", "aria-hidden": "true" }), ov = h("div", { class: "fb-ov" });
   const view = h("div", { class: "fb-view" }, canvas, ov);
-  const state = { M: null, startAt: 0, skipped: false, lastR: -1, shown: 0, key: "", cam: { cx: 52.5, cy: 34, z: 1 }, camMode: "follow", pp: new Map(), lastT: 0, ovKey: "", alive: true, raf: 0, sound: false, audio: null, momSeen: 0, voice: null, music: null, spokenIdx: 0, kits: null, dims: { W: 0, H: 0 }, ctx: null };
+  const state = { M: null, startAt: 0, skipped: false, lastR: -1, shown: 0, key: "", cam: { cx: 52.5, cy: 34, z: 1 }, camMode: "follow", pp: new Map(), lastT: 0, ovKey: "", alive: true, raf: 0, sound: false, audio: null, momSeen: 0, voice: null, music: null, spokenIdx: 0, vs: 1, live: null, lastLive: -1e9, kits: null, dims: { W: 0, H: 0 }, ctx: null };
   const skipBtn = h("button", { class: "btn small", type: "button", onclick: () => { if (!state.skipped) { state.skipped = true; if (onSkip) { try { onSkip(state.key); } catch (e) { /* the local skip still works */ } } } } }, "Skip to full time");
   const camBtn = h("button", { class: "btn small", type: "button", onclick: () => { state.camMode = state.camMode === "follow" ? "full" : "follow"; camBtn.textContent = state.camMode === "follow" ? "Camera: follow ball" : "Camera: full pitch"; } }, "Camera: follow ball");
   const sndBtn = h("button", { class: "btn small", type: "button", onclick: () => toggleSound() }, "Sound: off");
   const voiceBtn = h("button", { class: "btn small", type: "button", onclick: () => toggleVoice() }, "Commentary: off");
   const musicBtn = h("button", { class: "btn small", type: "button", onclick: () => toggleMusic() }, "Music: off");
-  const ctl = h("div", { class: "fb-ctl row wrap" }, skipBtn, reduced ? null : camBtn, sndBtn, voiceBtn, musicBtn);
-  const el = h("div", { class: "fb-viewer" }, h("div", { class: "fb-score" }, sb.a, sb.s, sb.b), clock, pensEl, reduced ? h("p", { class: "muted small center" }, "Reduced motion is on: commentary only.") : view, ctl, log);
+  const VSPEEDS = [["Slow", 0.85], ["Normal", 1], ["Fast", 1.15]];
+  const speedBtn = h("button", { class: "btn small", type: "button", onclick: () => { state.vs = (state.vs + 1) % VSPEEDS.length; speedBtn.textContent = "Voice speed: " + VSPEEDS[state.vs][0]; if (state.voice) state.voice.setSpeed(VSPEEDS[state.vs][1]); } }, "Voice speed: Normal");
+  const ctl = h("div", { class: "fb-ctl row wrap" }, skipBtn, reduced ? null : camBtn, sndBtn, voiceBtn, speedBtn, musicBtn);
+  const liveWrap = h("div", { class: "fb-live" });
+  const el = h("div", { class: "fb-viewer" }, h("div", { class: "fb-score" }, sb.a, sb.s, sb.b), clock, pensEl, reduced ? h("p", { class: "muted small center" }, "Reduced motion is on: commentary only.") : view, ctl, log, liveWrap);
 
   // ----- spoken commentary: off by default, started by a tap (browsers block speech before one). Full reads every line, Fast only the key lines. -----
   function toggleVoice() {
@@ -39,7 +44,7 @@ export function createViewer({ h, N, ent, onSkip }) {
     if (!state.voice) state.voice = createVoice({ synth: w.speechSynthesis, Utt: w.SpeechSynthesisUtterance });
     if (!state.voice.supported) { voiceBtn.textContent = "Commentary: not available"; return; }
     if (state.M) state.voice.setMode(state.M.speed);
-    state.voice.enable(); voiceBtn.textContent = "Commentary: on";
+    state.voice.setSpeed(VSPEEDS[state.vs][1]); state.voice.enable(); voiceBtn.textContent = "Commentary: on";
     state.spokenIdx = state.M && state.M.animated ? C.linesUntil(state.M, Math.max(0, state.lastR)).length : 0;   // start from "now", never read the backlog
   }
   function speakFeed(M, r) {
@@ -105,7 +110,8 @@ export function createViewer({ h, N, ent, onSkip }) {
     const e = ent(id); if (!e || typeof Image === "undefined") { f.bad = true; return f; }
     try {
       const im = new Image(); im.onload = () => { try { const w = im.naturalWidth || im.width || 0, hh = im.naturalHeight || im.height || 0; if (!w || !hh) { f.bad = true; return; } const c = document.createElement("canvas"); c.width = c.height = 64; const g = c.getContext("2d"), sq = Math.min(w, hh), sy = Math.max(0, (hh - sq) * 0.15); g.beginPath(); g.arc(32, 32, 32, 0, Math.PI * 2); g.clip(); g.drawImage(im, 0, sy, sq, sq, 0, 0, 64, 64); f.c = c; } catch (err) { f.bad = true; } };
-      im.onerror = () => { f.bad = true; }; im.src = e.image || "football/img/" + e.id + ".png";
+      const src = e.image || "football/img/" + e.id + ".png"; if (failed.has(src)) { f.bad = true; return f; }   // the shared memory of missing photos: no repeat request
+      im.onerror = () => { f.bad = true; failed.add(src); }; im.src = src;
     } catch (err) { f.bad = true; }
     return f;
   }
@@ -172,7 +178,7 @@ export function createViewer({ h, N, ent, onSkip }) {
     const live = now - state.startAt, r = state.skipped ? (M.animated ? M.endAnim : 0) : Math.max(0, live), names = M.names;
     sb.a.textContent = names[0]; sb.b.textContent = names[1];
     if (!M.animated) {   // Instant: the final score and the highlights
-      sb.s.textContent = `${M.finalScore[0]} - ${M.finalScore[1]}`; clock.textContent = "Full time"; pensEl.textContent = M.pens ? `Penalties: ${M.pens.score[0]}-${M.pens.score[1]}` : ""; skipBtn.hidden = true; camBtn.hidden = true; sndBtn.hidden = true; voiceBtn.hidden = true; musicBtn.hidden = true;
+      sb.s.textContent = `${M.finalScore[0]} - ${M.finalScore[1]}`; clock.textContent = "Full time"; pensEl.textContent = M.pens ? `Penalties: ${M.pens.score[0]}-${M.pens.score[1]}` : ""; skipBtn.hidden = true; camBtn.hidden = true; sndBtn.hidden = true; voiceBtn.hidden = true; speedBtn.hidden = true; musicBtn.hidden = true; liveWrap.hidden = true;
       if (state.shown === 0) { rc(log); log.append(h("div", { class: "mark" }, `Full-time: ${names[0]} ${M.finalScore[0]}-${M.finalScore[1]} ${names[1]}`)); for (const L of M.highlights) addLine(L); state.shown = 1; }
       return;
     }
@@ -182,6 +188,7 @@ export function createViewer({ h, N, ent, onSkip }) {
     clock.textContent = r >= M.total && fr.shown !== "pens" ? "Full time" : fr.shown === "pens" ? "Penalty shoot-out" : fr.seg.kind === "ht" ? "Half-time" : `${Math.floor(fr.minute)}'`;
     pensEl.textContent = fr.pens ? `Penalties: ${fr.pens[0]}-${fr.pens[1]}` : "";
     syncFeed(M, r); speakFeed(M, r);
+    if (state.live && (now - state.lastLive >= 400 || state.skipped || r >= M.endAnim)) { state.lastLive = now; const ls = liveStats(M, Math.min(r, M.endAnim)); if (r >= M.endAnim && M.pens) ls.pens = M.pens.score.slice(); state.live.update(ls); }   // the stats under the commentary, kept up to date
     if (state.music && state.music.running) { state.music.update(); state.music.duck(!!(state.voice && state.voice.busy)); }   // the music steps aside while the commentator talks
     // sound cues for the moments that just passed (only while following the live clock)
     if (state.sound && !state.skipped) { while (state.momSeen < M.moments.length && M.moments[state.momSeen].r <= r) { const m = M.moments[state.momSeen++]; if (r - m.r < 2500) { if (m.e === "goal") roar(); else if (m.e === "kick" || m.e === "ht" || m.e === "ft") whistle(); } } } else state.momSeen = M.moments.filter((m) => m.r <= r).length;
@@ -195,7 +202,7 @@ export function createViewer({ h, N, ent, onSkip }) {
     el, paint,
     get running() { return !!state.raf; },
     start() { if (!state.raf && canvas && typeof requestAnimationFrame === "function") state.raf = requestAnimationFrame(loop); },
-    load(M, startAt, key) { state.M = M; state.startAt = startAt; state.skipped = false; state.lastR = -1; state.shown = 0; state.ovKey = ""; state.kits = null; state.pp = new Map(); state.momSeen = 0; state.key = key || ""; state.spokenIdx = 0; if (state.voice) { state.voice.cancel(); state.voice.setMode(M.speed); } state.cam = { cx: 52.5, cy: 34, z: 1 }; rc(log); rc(ov); ov.hidden = true; skipBtn.hidden = false; },
+    load(M, startAt, key) { state.M = M; state.startAt = startAt; state.skipped = false; state.lastR = -1; state.shown = 0; state.ovKey = ""; state.kits = null; state.pp = new Map(); state.momSeen = 0; state.key = key || ""; state.lastLive = -1e9; state.live = null; rc(liveWrap); liveWrap.hidden = !M.animated; if (M.animated) { state.live = createStatsView({ h, names: M.names, kits: kitsOf(M.names), lineups: M.lineups, ent, icon: (p) => photo(h, p, "fb-photo"), surname: E.surname, title: "LIVE STATS" }); liveWrap.append(state.live.el); state.live.update(liveStats(M, 0)); } state.spokenIdx = 0; if (state.voice) { state.voice.cancel(); state.voice.setMode(M.speed); } state.cam = { cx: 52.5, cy: 34, z: 1 }; rc(log); rc(ov); ov.hidden = true; skipBtn.hidden = false; },
     skip() { state.skipped = true; },
     get skipped() { return state.skipped; },
     destroy() { state.alive = false; if (state.voice) state.voice.disable(); if (state.music) state.music.stop(); if (state.raf && typeof cancelAnimationFrame === "function") cancelAnimationFrame(state.raf); state.raf = 0; if (state.audio && state.audio.close) { try { state.audio.close(); } catch (e) { /* ignore */ } } }

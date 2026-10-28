@@ -6,15 +6,14 @@ const cache = new Map();
 let manifests = null;
 
 
-export async function listPacks() {
-  if (!manifests) {
+let manifestsP = null;   // one shared promise: concurrent callers must all wait for the same complete list
+export function listPacks() {
+  if (!manifestsP) manifestsP = Promise.all(LOADERS.map((load) => load().then((x) => x.default, (err) => { console.warn("[packs] could not load a pack manifest:", err); return null; }))).then((all) => {
     manifests = [];
-    for (const load of LOADERS) {
-      try { const m = (await load()).default; if (m && typeof m.id === "string" && !manifests.some((x) => x.id === m.id)) manifests.push(m); else console.warn("[packs] bad or duplicate pack skipped"); }
-      catch (err) { console.warn("[packs] could not load a pack manifest:", err); }
-    }
-  }
-  return manifests;
+    for (const m of all) { if (!m) continue; if (typeof m.id === "string" && !manifests.some((x) => x.id === m.id)) manifests.push(m); else console.warn("[packs] bad or duplicate pack skipped"); }
+    return manifests;
+  });
+  return manifestsP;
 }
 export async function defaultPackId() { return (await listPacks())[0].id; }
 

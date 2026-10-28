@@ -32,8 +32,8 @@ export default function createScreens(ctx) {
   }
 
   const cap = (x) => String(x == null ? "" : x).charAt(0).toUpperCase() + String(x == null ? "" : x).slice(1);
-  const QL = Object.assign({ kindTitle: "What kind?", speciesTitle: "Which one exactly?", kindName: "Kind", speciesName: "Species" }, (ctx.pack && ctx.pack.quiz) || {});
-  const noun = (ctx.pack && ctx.pack.nouns && ctx.pack.nouns.singular) || "animal";
+  const QL = Object.assign({ kindTitle: "What kind?", speciesTitle: "Which one exactly?", kindName: "Kind", speciesName: "Exact answer" }, (ctx.pack && ctx.pack.quiz) || {});
+  const noun = (ctx.pack && ctx.pack.nouns && ctx.pack.nouns.singular) || "item";
   const shape = ctx.pack && ctx.pack.quiz && ctx.pack.quiz.plate === "round" ? "" : " sq";   // animals: rounded square (whole photo visible); Pokémon: circle with the art shrunk inside it
   const mystery = (id, small) => {
     const e = ent(id), q = () => h("span", { class: "qz-q" }, "?");
@@ -221,4 +221,4 @@ export default function createScreens(ctx) {
   }
 
   return { quiz: quizScreen, results: resultsScreen };
-}
+}

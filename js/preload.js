@@ -35,4 +35,4 @@ export function preload(urls) {
   pump();
 }
 // The picture a card shows for an entity (same choice as the card code makes), used to prefetch upcoming lots.
-export const cardImage = (pack, a) => (!a ? null : (pack && (pack.engine === "pokemon" || pack.engine === "football")) ? a.image : (a.iconUrl || a.silhouette || null));
+export const cardImage = (pack, a) => (!a ? null : (pack && (pack.engine === "pokemon" || pack.engine === "football" || pack.engine === "basketball")) ? a.image : (a.iconUrl || a.silhouette || null));

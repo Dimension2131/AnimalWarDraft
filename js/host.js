@@ -56,21 +56,50 @@ export function startHost({ code, key, animals, pack, mode, onLog = () => {} }) 
   const fightSim = (A, B, arena, seed) => simulate(A, B, arena, seed, { arenaLabel: arenaOf(pack, arena).label });
   const modeHost = mode.createHost ? mode.createHost({ code, S, settings, nm, an, log, map, pack, simulate: fightSim }) : {};
 
-  async function startGame() {
+  // startGame(): the lobby's Start button. With { rematch: true } (results screen, "Play again: re-draft") only the players who are still online take part.
+  async function startGame(opts = {}) {
     if (modeHost.start) return modeHost.start();
-    const s = settings(), players = Object.entries(S.players || {}).filter(([, p]) => p.role !== "x").sort((a, b) => (a[1].joinedAt || 0) - (b[1].joinedAt || 0)).map(([k]) => k);
-    if (players.length < 2) throw new Error("Need at least 2 players");
+    const s = settings(), all = Object.entries(S.players || {}).filter(([, p]) => p.role !== "x").sort((a, b) => (a[1].joinedAt || 0) - (b[1].joinedAt || 0));
+    const players = (opts.rematch ? all.filter(([, p]) => p.online) : all).map(([k]) => k);
+    if (players.length < 2) throw new Error(opts.rematch ? "Need at least 2 players online to play again" : "Need at least 2 players");
     const f = s.filters || defaultFilters(pack);
     const pool = filterPool(animals, f, pack);
     if (pool.length < minPool(players.length, s.rosterSize)) throw new Error(`Pool too small: ${pool.length} < ${minPool(players.length, s.rosterSize)}`);
     const poolSeed = Math.floor(Math.random() * 4294967296);
     const ids = shuffleSeeded(pool.map((a) => a.id), poolSeed);
     const balances = {}; players.forEach((k) => { balances[k] = s.startBalance; });
-    await N.patch(code, "", {
+    const up = {
       game: { pool: ids, poolSeed, keys: players }, ledger: { balances, drawIndex: 0, stall: 0 },
-      auction: null, lineups: null, tour: null, appeals: null, "meta/started": true, "meta/phase": nextPhase(mode, "lobby") || "draft"
-    });
-    log("game started", ids.length, pack.nouns.plural, "in pool");
+      auction: null, lineups: null, tour: null, appeals: null, pkb: null, fights: null, "meta/started": true, "meta/phase": nextPhase(mode, "lobby") || "draft"
+    };
+    if (opts.rematch) for (const k of players) up[`players/${k}/appealTokens`] = 1;   // a fresh game: every player has their appeal again
+    await N.patch(code, "", up);
+    log(opts.rematch ? "rematch (new draft)" : "game started", ids.length, pack.nouns.plural, "in pool");
+  }
+
+  // playAgain("redraft"): a new draft with the same settings. playAgain("same"): keep every manager's drafted roster and submitted lineup and go straight to the mode's game again (new seeds).
+  async function playAgain(kind = "redraft") {
+    if (stopped) return;
+    if (modeHost.start && !modeHost.begin) return modeHost.start();   // quiz: there is no team, "play again" is a fresh plan
+    if (!S.meta || S.meta.phase !== "results") throw new Error("A new game can only be started from the results screen.");
+    if (kind !== "same") return startGame({ rematch: true });
+    const G = S.game || {}, L = S.ledger || {};
+    const keys = arr(G.keys).filter((k) => rosterOf(k).length > 0 && ((S.players || {})[k] || {}).online);
+    if (keys.length < 2) throw new Error("Need at least 2 players online to play again");
+    const lineups = {};
+    for (const k of keys) {
+      const draft = rosterOf(k).map((x) => x.id), sub = arr(((S.lineups || {})[k] || {}).order);
+      lineups[k] = sub.length === draft.length && [...sub].sort().join() === [...draft].sort().join() ? sub : draft;
+    }
+    const next = nextPhase(mode, "lineup"); if (!next) throw new Error("This mode has no game to repeat.");
+    const reset = { tour: null, appeals: null, pkb: null, fights: null, "game/results": null };
+    for (const k of keys) reset[`players/${k}/appealTokens`] = 1;
+    await N.patch(code, "", reset);
+    S.tour = null; S.appeals = null;   // the mirror catches up on its own; modes' begin() must not see the finished game's record
+    const ok = modeHost.begin ? await modeHost.begin(next, { keys, lineups }) : true;
+    if (!ok) throw new Error("The game could not be restarted.");
+    await N.put(code, "meta/phase", next);
+    log("rematch (same teams)", keys.length, "players");
   }
 
   const rosterOf = (k) => arr(((S.ledger || {}).rosters || {})[k]);
@@ -78,7 +107,7 @@ export function startHost({ code, key, animals, pack, mode, onLog = () => {} }) 
     const text = o.kind === "win" ? `${nm(o.winner)} won ${an(o.animalId)} for $${o.price}`
       : o.kind === "claim" ? `${nm(o.winner)} claimed ${an(o.animalId)} for free`
       : o.kind === "deal" ? `${an(o.animalId)} dealt to broke player ${nm(o.winner)}`
-      : o.kind === "stall" ? `STALL RULE: ${an(o.animalId)} goes straight to ${nm(o.winner)} (fewest animals)`
+      : o.kind === "stall" ? `Too many unsold lots in a row: ${an(o.animalId)} goes straight to ${nm(o.winner)} (fewest ${pack.nouns.plural})`
       : `${an(o.animalId)} was discarded`;
     await N.tx(code, "ledger", (L) => {
       L = L || {}; L.applied = L.applied || {}; if (L.applied[o.id]) return undefined;
@@ -168,6 +197,7 @@ export function startHost({ code, key, animals, pack, mode, onLog = () => {} }) 
   return {
     startGame,
     ...(modeHost.api || {}),
+    playAgain,
     stop() { stopped = true; clearInterval(loopT); clearInterval(beatT); clearInterval(pruneT); unsubs.forEach((u) => u()); window.__isHost = false; }
   };
 }

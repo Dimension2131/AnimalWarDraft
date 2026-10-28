@@ -2,7 +2,8 @@ import * as E from "./engine.js";
 import { planOf } from "./host.js";
 import * as B from "./bracket.js";
 import * as C from "./choreo.js";
-import { createViewer } from "./viewer.js";
+import { createViewer, kitsOf } from "./viewer.js";
+import { buildStats, createStatsView } from "./stats.js";
 import { photo } from "./card.js";
 import { ensureStyles } from "./styles.js";
 
@@ -145,7 +146,7 @@ export default function createScreens(ctx) {
     function setup(T, f) {
       curId = f.id; cmpDone = ""; plan = planFor(T, f); names = [nameOf(f.a), nameOf(f.b)];
       if (viewer) viewer.destroy();
-      viewer = createViewer({ h, N, ent, onSkip: () => { if (f.a === S.key || f.b === S.key) N.patch(S.code, "", { [`lineups/${S.key}/skip`]: f.id }).catch(() => {}); } });   // skipping is local, but the host ends the match early once both managers have skipped
+      viewer = createViewer({ h, N, ent, onSkip: () => { if (f.a === S.key || f.b === S.key) N.patch(S.code, "", { [`lineups/${S.key}/skip`]: `${f.id}:${f.seed}` }).catch(() => {}); } });   // skipping is local, but the host ends the match early once both managers have skipped
       viewer.load(plan.M, f.startAt, f.id); viewer.start();
     }
     function between(T) {
@@ -187,11 +188,23 @@ export default function createScreens(ctx) {
 
   // =============== RESULTS ===============
   function resultsScreen() {
-    const body = h("div", { class: "card" });
-    screen(h("h1", {}, "Final standings"), body, h("button", { class: "btn primary", onclick: () => ctx.leave() }, "Leave room"));
+    const body = h("div", { class: "card" }), again = ctx.playAgainBar ? ctx.playAgainBar({ same: true }) : null;   // the shared "Play again (same team / re-draft)" buttons, like the other modes
+    screen(h("h1", {}, "Final standings"), body, again ? again.el : null, h("button", { class: "btn", onclick: () => ctx.leave() }, "Leave room"));
+    let sel = "";   // the match whose team stats are shown (default: the final)
+    const statCache = {};
+    const played = (T) => { const out = []; for (const rd of arr(T.bracket && T.bracket.rounds)) for (const m of arr(rd)) { const r = (T.res || {})[m.id]; if (!r || r.bye || !r.w) continue; const f = Object.values(T.fights || {}).find((x) => x.mid === m.id); if (f) out.push({ m, r, f }); } return out; };
+    const statsFor = (T, f) => (statCache[f.id] = statCache[f.id] || (() => { const names = [nameOf(f.a), nameOf(f.b)], p = planOf(ctx.entities.map, T, f, names, f.speed === "instant" ? "full" : undefined); return { names, st: buildStats({ M: p.M, sim: p.sim }) }; })());   // the film the match was watched with (so the final table equals the live one); an Instant match has no film, so its table uses the Full one
+    function statsPanel(T, f) {   // like a match-centre team stats table: each side's players (face + name) next to the numbers, the leading side of every row highlighted
+      const d = statsFor(T, f), view = createStatsView({ h, names: d.names, kits: kitsOf(d.names), lineups: [arr(T.lineups[f.a]).slice(0, E.XI), arr(T.lineups[f.b]).slice(0, E.XI)], ent, icon: ctx.icon, surname: E.surname });
+      view.update(d.st); return h("div", {}, view.el, h("p", { class: "muted small center" }, "Shots, shots on target and cards come from the match simulation; possession, passes, fouls, corners and offsides are counted from the play."));
+    }
     return { update() {
-      const r = (S.game && S.game.results) || {}, T = S.tour || {}, ch = arr(r.champion);
+      if (again) again.update();
+      const r = (S.game && S.game.results) || {}, T = S.tour || {}, ch = arr(r.champion), list2 = played(T);
+      if (!list2.some((x) => x.m.id === sel)) { const fin = list2.filter((x) => !x.m.third).pop() || list2[list2.length - 1]; sel = fin ? fin.m.id : ""; }
+      const cur = list2.find((x) => x.m.id === sel);
       rc(body, ch.length ? h("p", { class: "fb-champ" }, `🏆 ${ch.map(nameOf).join(" & ")}`) : null, arr(r.order).length ? rankList(r.order) : null, T.bracket ? bracketEl(T, S.key) : h("p", { class: "muted" }, "No results recorded."),
+        cur ? h("h3", {}, "Match stats") : null, cur && list2.length > 1 ? h("div", { class: "row wrap fb-st-tabs" }, list2.map((x) => h("button", { class: "btn small" + (x.m.id === sel ? " primary" : ""), type: "button", onclick: () => { sel = x.m.id; this.update(); } }, `${x.m.label}: ${nameOf(x.f.a)} ${x.r.score[0]}-${x.r.score[1]} ${nameOf(x.f.b)}`))) : null, cur ? statsPanel(T, cur.f) : null,
         ...arr(r.order).map((k) => h("div", { class: "fb-xi" }, h("b", {}, `${nameOf(k)} · ${(T.formations || {})[k] || E.DEFAULT_FORMATION}`), h("div", { class: "row wrap" }, arr(T.lineups && T.lineups[k]).slice(0, E.XI).map((id) => ctx.icon(ent(id)))))));
     } };
   }

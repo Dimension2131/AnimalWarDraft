@@ -14,7 +14,7 @@ export default {
   icon: "🦁",
   blurb: "Real animals, five stats, one brutal tournament.",
   tagline: "Bid on animals, set your lineup, then watch them fight.",
-  nouns: { singular: "animal", plural: "animals" },
+  nouns: { singular: "animal", plural: "animals", roster: "roster", rosters: "rosters" },
 
   // The five engine stats (speed, offense, defense, stamina, instinct) + size. Order = display order on cards.
   // `description` is shown as a tooltip / tap popover wherever the stat appears. Written from js/sim.js and js/rules.js.
@@ -95,6 +95,7 @@ export default {
   //   numeric[]: one entry per numeric question type. source "entity" reads entity[key]; source "facts" reads facts[id].facts[key] (medium/high confidence only unless the lobby allows low).
   //   prompt placeholders: {a} (a/an), {name}, {medium} (the fact's run/fly/swim/crawl, else def.medium). min/max = slider range (log scale), unit = label.
   quiz: {
+    kindTitle: "What kind?", speciesTitle: "Which species exactly?", kindName: "Kind", speciesName: "Species",   // the animals world says "species"; no other world does
     facts: "animals/animals_facts.js",
     images: ["animals/images.js", "animals/animals_images.js"],   // optional photo map { id: { url, credit?, page? } } made by tools/fetch-images.mjs; missing file = emoji fallback, no error
     kindFallbackField: "class", groupField: "class", skipKinds: ["other"],
@@ -193,4 +194,4 @@ export default {
     defaultDifficulty: "mixed",
     defaultLegs: 4, minLegs: 2, maxLegs: 8
   }
-};
+};

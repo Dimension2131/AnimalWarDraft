@@ -12,8 +12,8 @@ export const AI_PROXY_URL = "https://adw-judge.rukshanyashitha1.workers.dev";
 export const AI_JUDGE_TIMEOUT_MS = 20000;
 export const AI_STAGE_MS = 30000;
 
-export const MAX_PLAYERS = 6;
-export const MAX_CONNECTIONS = 10;
+export const MAX_PLAYERS = 10;   // was 6: the Basketball War Draft is built for up to 10 coaches
+export const MAX_CONNECTIONS = 16;   // players + spectators (was 10)
 export const HEARTBEAT_MS = 3000;
 export const HOST_STALE_MS = 10000;
 export const CHAT_MIN_GAP_MS = 1000;

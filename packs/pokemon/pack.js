@@ -6,14 +6,14 @@ export default {
   name: "Pokémon",
   title: "Pokémon War Draft",
   tagline: "Bid on Pokémon, build a team, then battle with real moves.",
-  icon: "⚡",
+  icon: "🔴",
   blurb: "1,081 Pokémon with their real stats, types and moves.",
   // Images are self-hosted (pokemon/img/art/<pid>.webp 256px, pokemon/img/sprite/<pid>.png 96px, made by tools/fetch-pokemon-images.py). The PokeAPI GitHub URLs stay as a fallback.
   imageUrl: (a) => "pokemon/img/art/" + a.pid + ".webp",
   iconUrl: (a) => "pokemon/img/sprite/" + a.pid + ".png",
   iconAlt: (a) => "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/" + a.pid + ".png",
   heroIds: ["pikachu", "charizard", "mewtwo", "lucario", "gengar", "garchomp", "greninja", "eevee", "dragonite", "gyarados", "umbreon", "rayquaza", "blaziken", "snorlax", "mimikyu", "tyranitar"],
-  nouns: { singular: "Pokémon", plural: "Pokémon" },
+  nouns: { singular: "Pokémon", plural: "Pokémon", roster: "team", rosters: "teams" },
   engine: "pokemon",          // not the animal fight engine: the Worker/appeal flow does not apply, and the battle modes read this
   noArenas: true,             // no arena bonus tiles / toughness row on the draft card
   iconField: "image",         // draft cards show the colour artwork (animals show silhouettes)
@@ -25,8 +25,8 @@ export default {
     { key: "hp", label: "HP", abbr: "HP", description: "Base HP. In battle (Lv 50) max HP = base + 86. Run out and the Pokémon faints." },
     { key: "atk", label: "Attack", abbr: "ATK", description: "Base Attack. In battle (Lv 50) = base + 31. Powers physical moves (Earthquake, Close Combat...)." },
     { key: "def", label: "Defense", abbr: "DEF", description: "Base Defense. In battle = base + 31. Reduces damage from physical moves." },
-    { key: "spa", label: "Sp. Atk", abbr: "SPA", description: "Base Special Attack. In battle = base + 31. Powers special moves (Flamethrower, Psychic...)." },
-    { key: "spd", label: "Sp. Def", abbr: "SPD", description: "Base Special Defense. In battle = base + 31. Reduces damage from special moves." },
+    { key: "spa", label: "Special Attack", abbr: "SPA", description: "Base Special Attack. In battle = base + 31. Powers special moves (Flamethrower, Psychic...)." },
+    { key: "spd", label: "Special Defense", abbr: "SPD", description: "Base Special Defense. In battle = base + 31. Reduces damage from special moves." },
     { key: "spe", label: "Speed", abbr: "SPE", description: "Base Speed. In battle = base + 31. Decides who moves first (after move priority); paralysis halves it." }
   ],
   arenas: [],
@@ -60,6 +60,7 @@ export default {
 
   quiz: {
     modeTitle: "Who's That Pokémon?",
+    modeDescription: "Name the type from the black silhouette (bonus: the exact Pokémon), then guess its Pokédex numbers. The closest guesses win. No draft, no battles.",
     plate: "round", kindTitle: "Which type?", speciesTitle: "Which Pokémon exactly?", kindName: "Type", speciesName: "Pokémon",
     kindFallbackField: "type1", groupField: "type1", skipKinds: [],
     kindPrompt: "What is its main type?", speciesPrompt: "Who's that Pokémon?",

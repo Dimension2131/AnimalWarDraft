@@ -3,9 +3,14 @@
 // Pure functions: (picker, rnd, context) -> text. The picker avoids repeating any of the last few lines, and everything is driven by the choreography's own seeded random stream, so every device says the same thing.
 const ord = (n) => (n === 1 ? "first" : n === 2 ? "second" : n === 3 ? "third" : `${n}th`);
 
-export function makePicker() {   // never repeats a phrase it used recently: remembers which template (by call site and index, so a different player name does not hide a repeat) it used last
-  const recent = [];
-  const P = (rnd, arr) => { let i = Math.floor(rnd() * arr.length) % arr.length; for (let k = 0; k < 6 && recent.includes(`${P.key}#${i}`); k++) i = Math.floor(rnd() * arr.length) % arr.length; recent.push(`${P.key}#${i}`); if (recent.length > 14) recent.shift(); return arr[i]; };
+export function makePicker() {   // never repeats a phrase it used recently: remembers, per phrase pool, which template (by index, so a different player name does not hide a repeat) it used last
+  const recent = new Map();
+  const P = (rnd, arr) => {
+    const mem = recent.get(P.key) || [], avoid = mem.slice(-Math.min(3, arr.length - 1)); let i = Math.floor(rnd() * arr.length) % arr.length;
+    for (let k = 0; k < 8 && avoid.includes(i); k++) i = Math.floor(rnd() * arr.length) % arr.length;
+    if (avoid.includes(i)) i = [...arr.keys()].find((j) => !avoid.includes(j)) ?? i;
+    mem.push(i); if (mem.length > 6) mem.shift(); recent.set(P.key, mem); return arr[i];
+  };
   P.key = "";
   return P;
 }
@@ -53,10 +58,11 @@ export const W = {
   foul: (P, r, x) => P(r, [`${x.b} goes in late on ${x.a}. Free kick.`, `That's a foul. ${x.b} caught him, and the referee blows.`, `${x.a} is brought down by ${x.b}. Free kick to ${x.team}.`, `The whistle goes: ${x.b} was a fraction late there.`, `${x.b} clips ${x.a}. Referee gives the free kick.`]),
   corner: (P, r, x) => P(r, [`Corner to ${x.team}. ${x.a} goes over to take it.`, `${x.team} have a corner. Bodies in the box.`, `It's a corner, and ${x.team} will send men forward.`]),
   cornerClear: (P, r, x) => P(r, [`${x.a} heads it clear.`, `${x.a} gets there first and clears the danger.`, `${x.a} rises highest and nods it away.`, `Cleared by ${x.a}, ${x.opp} breathe again.`]),
+  offside: (P, r, x) => P(r, [`The flag is up! ${x.a} was just offside.`, `Offside. ${x.a} went a fraction too early.`, `${x.a} was a yard offside there, the assistant has got that one right.`, `Up goes the flag for offside, and ${x.team} are pulled back.`]),
   gk: (P, r, x) => P(r, [`${x.a} plays it long.`, `${x.a} takes his time, and sends it downfield.`, `${x.a} launches it up the pitch.`, `Goal kick, and ${x.a} goes long.`]),
   heldSafely: (P, r, x) => P(r, [`Held safely.`, `${x.a} gathers it comfortably.`, `Claimed by ${x.a}, no problem.`]),
   // ---- chances ----
-  shot: (P, r, x) => P(r, [`${x.a} shoots!`, `${x.a} lets fly!`, `${x.a} pulls the trigger!`, `${x.a} has a go from distance!`, `Here's the chance for ${x.a}!`, `${x.a} gets it out of his feet, and shoots!`]),
+  shot: (P, r, x) => P(r, [`${x.a} shoots!`, `${x.a} lets fly!`, `${x.a} pulls the trigger!`, `${x.a} has a go from distance!`, `Here's the chance for ${x.a}!`, `${x.a} gets it out of his feet, and shoots!`, `${x.a}, with a sight of goal... shoots!`]),
   cross: (P, r, x) => P(r, [`${x.a} whips in the cross!`, `Here's the delivery from ${x.a}!`, `${x.a} swings it into the box!`, `${x.a} floats one in, ${x.b} attacking it!`]),
   wing: (P, r, x) => P(r, [`${x.a} gets to the byline…`, `${x.a} races down the ${x.side}, he's in behind!`, `${x.a} has the whole flank to himself.`]),
   breakthrough: (P, r, x) => P(r, [`${x.a} slides it through, ${x.b} is in on goal!`, `${x.a} sees the run and plays it, ${x.b} one on one!`, `Perfectly weighted from ${x.a}, ${x.b} has a sight of goal!`]),
@@ -97,6 +103,11 @@ export const W = {
     const [a, b] = x.score, res = a === b ? `It finishes level, ${a}-${b}.` : `${a > b ? x.nameA : x.nameB} win it, ${Math.max(a, b)}-${Math.min(a, b)}.`;
     return `It's all over! Full time: ${x.nameA} ${a}, ${x.nameB} ${b}. ${res}${x.scorers.length ? ` The goals came from ${joinNames(x.scorers)}.` : ""}`;
   },
+  // ---- reactions: the short reaction a commentator gives straight after a moment ----
+  react: (P, r, x) => {
+    const pools = { miss: [`Unlucky.`, `So close.`, `He'll be disappointed with that.`, `Oh, that's a big chance gone.`, `He had to score there.`], save: [`Wonderful stop.`, `That's top-class goalkeeping.`, `What a save.`, `The keeper was equal to it.`], block: [`Brave defending.`, `Great block.`, `That's the kind of thing that wins matches.`], shot: [`Oh, that's dangerous!`, `This could be it!`, `Here we go!`] };
+    return pools[x.k] ? P(r, pools[x.k]) : ``;
+  },
   // ---- colour: what a co-commentator would add ----
   possession: (P, r, x) => {
     const lead = x.poss[0] >= x.poss[1] ? 0 : 1, pc = Math.round(x.poss[lead]), n = [x.nameA, x.nameB][lead];
@@ -106,6 +117,8 @@ export const W = {
     const [a, b] = x.shots;
     return a + b < 2 ? P(r, [`Not much between the sides yet, chances have been scarce.`, `Both defences on top so far.`]) : P(r, [`${a > b ? x.nameA : x.nameB} lead the shot count, ${Math.max(a, b)} to ${Math.min(a, b)}.`, `${x.nameA} have had ${a} ${a === 1 ? "shot" : "shots"}, ${x.nameB} ${b}.`]);
   },
+  remark: (P, r, x) => P(r, [`You can feel the tension building here.`, `That's the beauty of this game: one moment and everything changes.`, `Both sides know what is at stake.`, `It's been an entertaining watch so far.`, `Neither team wants to give an inch.`, `It's all about who keeps their concentration now.`, `The crowd are making themselves heard.`, `Good football, this. Real quality on show.`, `Every challenge is being fought for.`,
+    ...(x.m <= 15 ? [`Still early, both sides feeling each other out.`, `A tidy start from both teams.`] : []), ...(x.m >= 70 ? [`Legs are getting heavy now, and the substitutions could matter.`, `This is where fitness tells.`, `The tempo is dropping a little, as you'd expect at this stage.`] : [])]),
   state: (P, r, x) => {
     const [a, b] = x.score, m = x.m;
     if (m >= 85 && a !== b) return P(r, [`${a > b ? x.nameB : x.nameA} are running out of time. They need something here.`, `The clock is not on the side of ${a > b ? x.nameB : x.nameA}.`]);
@@ -114,14 +127,10 @@ export const W = {
     if (a !== b && Math.abs(a - b) >= 2) return P(r, [`${a > b ? x.nameB : x.nameA} have a mountain to climb.`, `That's a comfortable cushion for ${a > b ? x.nameA : x.nameB}, though football can be a cruel game.`]);
     return P(r, [`${m} minutes played, ${x.nameA} ${a}, ${x.nameB} ${b}.`, `We're ${m} minutes in, and it's ${x.nameA} ${a}, ${x.nameB} ${b}.`, `Good, competitive football out there.`, `The tempo is high, and both sides are going at it.`, `A lot of effort from both teams, the crowd is enjoying this.`]);
   },
-  trait: (P, r, x) => ({
-    pace: P(r, [`${x.a} has the pace to hurt anyone.`, `With his pace, ${x.a} is always a threat on the break.`]),
-    power: P(r, [`${x.a} is a real physical presence.`, `Very hard to knock ${x.a} off the ball.`]),
-    skill: P(r, [`${x.a} is a joy to watch on the ball.`, `There's so much technique in ${x.a}.`]),
-    finishing: P(r, [`${x.a} is a natural finisher.`, `Give ${x.a} a sniff and he'll take it.`]),
-    passing: P(r, [`${x.a} sets the tempo for ${x.team}.`, `${x.a} sees things other players don't.`]),
-    defending: P(r, [`${x.a} is a rock at the back.`, `${x.a} reads the game so well.`])
-  }[x.t] || `${x.a} is having a decent game.`)
+  trait: (P, r, x) => {
+    const pools = { pace: [`${x.a} has the pace to hurt anyone.`, `With his pace, ${x.a} is always a threat on the break.`], power: [`${x.a} is a real physical presence.`, `Very hard to knock ${x.a} off the ball.`], skill: [`${x.a} is a joy to watch on the ball.`, `There's so much technique in ${x.a}.`], finishing: [`${x.a} is a natural finisher.`, `Give ${x.a} a sniff and he'll take it.`], passing: [`${x.a} sets the tempo for ${x.team}.`, `${x.a} sees things other players don't.`], defending: [`${x.a} is a rock at the back.`, `${x.a} reads the game so well.`] };
+    return pools[x.t] ? P(r, pools[x.t]) : `${x.a} is having a decent game.`;
+  }
 };
 for (const k of Object.keys(W)) { const f = W[k]; W[k] = (P, r, x) => { P.key = k; return f(P, r, x); }; }   // the picker knows which phrase pool is asking
 void ord;

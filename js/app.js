@@ -5,9 +5,12 @@ import * as M from "./modes.js";
 import { tip, installTips } from "./tips.js";
 import { simulate, validateAnimals, balanceTest } from "./sim.js";
 import * as FBC from "../modes/football/card.js";
+import * as BBC from "../modes/basketball/card.js";
 import { preload, failed, cardImage } from "./preload.js";
 
 const $ = (s, r = document) => r.querySelector(s);
+// DOM replaceChildren() turns null/undefined/false into the TEXT "null": every call goes through rc(), which drops them (like h() does).
+const rc = (el, ...kids) => el.replaceChildren(...kids.flat(Infinity).filter((k) => k != null && k !== false));
 const arr = (v) => (Array.isArray(v) ? v : v ? Object.values(v) : []);
 const icon = (a, eager) => {
   const em = () => h("span", { class: "emoji" }, a.emoji);
@@ -29,8 +32,9 @@ function hero(pack, list) {
   while (pool.length && picks.length < 3) picks.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
   return h("div", { class: "hero" },
     h("div", { class: "hero-art", "aria-hidden": "true" }, picks.map((a, i) => h("img", { class: `hero-sil ink-${inks[i]} hs${i}`, src: a.silhouette, alt: "", onerror: (e) => e.target.remove() }))),
-    h("h1", { class: "wordmark" }, pack.title.split(/\s+/).map((w) => h("span", { "data-t": w }, w))),
-    h("p", { class: "tagline" }, pack.tagline));
+    h("div", { class: "hero-copy" },
+      h("h1", { class: "wordmark" }, pack.title.split(/\s+/).map((w) => h("span", { "data-t": w }, w))),
+      h("p", { class: "tagline" }, pack.tagline)));
 }
 function h(tag, attrs, ...kids) {
   const e = document.createElement(tag);
@@ -70,16 +74,16 @@ function glitchTo(wordmark, title) {
 async function pageValidate() {
   const { pack, list: ANIMALS } = await loadPackData(new URLSearchParams(location.search).get("pack"));
   const v = pack.engine ? ANIMALS.flatMap((e) => (pack.validate ? pack.validate(e) : []).map((x) => `${e.id}: ${x}`)) : validateAnimals(ANIMALS, pack);
-  root.replaceChildren(h("section", { class: "screen" }, h("h1", {}, "Validate animals"),
+  rc(root, h("section", { class: "screen" }, h("h1", {}, "Validate animals"),
     h("p", {}, `${ANIMALS.length} animals loaded, ${v.length} violation(s).`),
     v.length ? h("ul", { class: "viol" }, v.map((x) => h("li", {}, x))) : h("p", { class: "ok" }, "All animals are valid.")));
 }
 async function pageBalance() {
   const { pack, list: ANIMALS } = await loadPackData(new URLSearchParams(location.search).get("pack"));
-  root.replaceChildren(h("section", { class: "screen" }, h("h1", {}, "Balance test"), h("p", {}, "Simulating 2000 random 5v5 fights...")));
+  rc(root, h("section", { class: "screen" }, h("h1", {}, "Balance test"), h("p", {}, "Simulating 2000 random 5v5 fights...")));
   setTimeout(() => {
     const bt = balanceTest(ANIMALS, 2000, P.arenaIds(pack));
-    root.replaceChildren(h("section", { class: "screen" }, h("h1", {}, "Balance test"),
+    rc(root, h("section", { class: "screen" }, h("h1", {}, "Balance test"),
       h("p", {}, `Fights: ${bt.fights} · draw rate ${(bt.drawRate * 100).toFixed(1)}% · cap draws ${bt.capDraws} · avg ticks ${bt.avgTicks.toFixed(1)} · max ${bt.maxTicks} · side A win ${(bt.aWinRate * 100).toFixed(1)}%`),
       h("div", { class: "scroll" }, h("table", { class: "tbl" },
         h("thead", {}, h("tr", {}, ["Animal", "Games", "Wins", "Draws", "Win rate", "Flag"].map((x) => h("th", {}, x)))),
@@ -93,12 +97,15 @@ async function main() {
   if (/[?&]validate\b/.test(q)) return pageValidate();
   if (/[?&]balance\b/.test(q)) return pageBalance();
   let N, H;
-  try { N = await import("./net.js"); H = await import("./host.js"); }
-  catch (e) { root.replaceChildren(h("section", { class: "screen" }, h("h1", {}, "Could not load Firebase"), h("p", {}, String(e)), h("p", { class: "muted" }, "Open this page through a web server (https or http://localhost), not file://, and check your connection."))); return; }
+  const hint = (() => { try { return sessionStorage.getItem("adw_room") ? sessionStorage.getItem("adw_world") : null; } catch { return null; } })();   // a reload inside a room: load that room's pack first, not the default one
+  const early = Promise.all([loadPackData(hint || undefined), M.listModes(), P.listPacks()]);   // all of this was strictly one-after-another before
+  early.catch(() => { });
+  try { [N, H] = await Promise.all([import("./net.js"), import("./host.js")]); }
+  catch (e) { rc(root, h("section", { class: "screen" }, h("h1", {}, "Could not load Firebase"), h("p", {}, String(e)), h("p", { class: "muted" }, "Open this page through a web server (https or http://localhost), not file://, and check your connection."))); return; }
 
   installTips();
   const S = { code: null, role: null, key: null, name: "", connected: true, loaded: {}, chat: [], view: "home" };
-  const DEFAULT = await loadPackData(); let PK = DEFAULT.pack, ENT = { list: DEFAULT.list, map: DEFAULT.map }, MD = (await M.getMode()), ctxKey = "", ctxLoading = "", MODES = await M.listModes(), PACKS = await P.listPacks();
+  const [DEFAULT, MODES, PACKS] = await early; let PK = DEFAULT.pack, ENT = { list: DEFAULT.list, map: DEFAULT.map }, MD = (await M.getMode()), ctxKey = "", ctxLoading = "";
   const modeScreens = {}; let homePack = PK.id;
   const want = () => (S.meta ? `${S.meta.pack || PACKS[0].id}|${S.meta.mode || MODES[0].id}` : "");
   async function ensureCtx() {
@@ -183,7 +190,7 @@ async function main() {
   });
   function topbar() {
     const b = $("#banner"), tb = $("#topbar");
-    tb.replaceChildren();
+    rc(tb);
     if (S.code) {
       tb.append(h("span", { class: "brand" }, PK.title), h("span", { class: "code" }, S.code), h("span", { class: "who" }, S.role === "spectator" ? "spectating" : S.name), ...(isHost() ? [h("span", { class: "pill host" }, "host")] : []),
         h("span", { class: S.connected ? "dot on" : "dot" }), h("button", { class: "btn small", onclick: leave }, "Leave"));
@@ -193,7 +200,7 @@ async function main() {
     if (!N.configured) msg = "Firebase is not configured. Edit the block at the top of rules.js.";
     else if (!S.connected) msg = "Offline, reconnecting…";
     else if (taken) msg = "taken";
-    b.hidden = !msg; b.replaceChildren();
+    b.hidden = !msg; rc(b);
     if (msg === "taken") b.append("Your seat was taken over by another device. ", h("button", { class: "btn small", onclick: async () => { await N.reassert(S.code, "player", S.key, S.name); await N.patch(S.code, `players/${S.key}`, { sid: N.sid, online: true }); schedule(); } }, "Take it back"));
     else if (msg) b.append(msg);
   }
@@ -202,7 +209,7 @@ async function main() {
   function mount(name, key = name, factory = screens[name]) {
     if (key === currentName) return;
     if (current && current.destroy) current.destroy();
-    root.replaceChildren(); currentName = key; current = factory();
+    rc(root); currentName = key; current = factory();
   }
 
   function modeScreen(phase) {
@@ -246,6 +253,7 @@ async function main() {
   function animalCard(a, compact, note, hideTraits) {
     if (PK.engine === "pokemon") return pokemonCard(a, compact, note);
     if (PK.engine === "football") return FBC.card({ h, tip, PK }, a, compact, note);
+    if (PK.engine === "basketball") return BBC.card({ h, tip, PK }, a, compact, note);
     const stats = P.engineStats(PK);
     const zone = (statVals, tileVals, ta) => compact ? null : h("div", { class: "statzone" },
       h("div", { class: "stats" }, stats.map((st) => { const s = st.key; return h("div", { class: "stat s-" + s }, tip(h("span", {}, st.label), st.description), h("div", { class: "sbar" }, h("i", { style: `width:${statVals ? statVals[s] : 0}%` })), h("b", {}, statVals ? statVals[s] : "?")); }), toughRow(ta)),
@@ -263,10 +271,34 @@ async function main() {
       h("div", { class: "row wrap traitrow" }, ...traitPills(a, hideTraits)),
       zone(a, a.arena_bonus || {}, a));
   }
+  const rn = () => PK.nouns.roster || "roster", rns = () => PK.nouns.rosters || rn() + "s";   // each world's word for a drafted group: roster (animals), team (Pokémon), squad (football)
   const bar = (total) => { const i = h("i"); const marks = total ? h("div", { class: "cmarks" }, [0.25, 0.5, 0.75].map((f) => h("span", { style: `left:${f * 100}%` }, `${Math.round(total * f)}s`))) : null; return { el: h("div", { class: "cwrap" }, h("div", { class: "cbar" }, i), marks), set(f) { i.style.width = Math.max(0, Math.min(1, f)) * 100 + "%"; i.className = f < 0.25 ? "low" : ""; } }; };
   const screen = (...k) => { const s = h("section", { class: "screen" }, ...k); root.append(s); return s; };
-  const statStrip = (a) => PK.engine === "football" ? FBC.strip({ h, tip }, PK, a) : h("span", { class: "sstrip" }, ...P.engineStats(PK).map((st) => h("span", { class: "sp s-" + st.key }, tip(h("i", {}, st.abbr || st.label), st.description), h("b", {}, a[st.key]))), toughChip(a), ...traitPills(a, false));
+  const statStrip = (a) => PK.engine === "football" ? FBC.strip({ h, tip }, PK, a) : PK.engine === "basketball" ? BBC.strip({ h, tip }, PK, a) : h("span", { class: "sstrip" }, ...P.engineStats(PK).map((st) => h("span", { class: "sp s-" + st.key }, tip(h("i", {}, st.abbr || st.label), st.description), h("b", {}, a[st.key]))), toughChip(a), ...traitPills(a, false));
+  // "Play again" buttons for a results screen (every mode). Only the host can start the next game (its device runs the game); everybody else sees a waiting note.
+  //   same: true  -> also offer "same team": every manager keeps the drafted team and lineup and the mode's game is played again (new random seeds)
+  //   re-draft    -> a new draft with the same settings (players who are offline are left out)
+  function playAgainBar({ same = true } = {}) {
+    let busy = false;
+    const go = async (kind) => {
+      const r = runner; if (!r || !r.playAgain || busy) return;
+      busy = true; update();
+      try { await r.playAgain(kind); } catch (e) { toast(e.message); } finally { busy = false; update(); }
+    };
+    const bSame = h("button", { class: "btn primary big", type: "button", onclick: () => go("same") }, "Play again (same team)");
+    const bNew = h("button", { class: same ? "btn big" : "btn primary big", type: "button", onclick: () => go("redraft") }, same ? "Play again (re-draft)" : "Play again");
+    const note = h("p", { class: "muted small center" }, "Waiting for the host to start another game…");
+    const el = h("div", { class: "again" }, h("div", { class: "again-btns" }, same ? bSame : null, bNew), note);
+    function update() {
+      const host = isHost() && !!runner;
+      bSame.hidden = !host; bNew.hidden = !host; note.hidden = host;
+      bSame.disabled = bNew.disabled = busy;
+    }
+    update();
+    return { el, update };
+  }
   const uiCtx = {
+    playAgainBar,
     h, screen, arr, secs, toast, schedule, icon, bar, animalCard, statStrip, tip, S, N, R,
     nameOf, isHost, voterId, settings, leave: () => leave(),
     runner: () => runner,
@@ -290,20 +322,21 @@ async function main() {
     const renderPub = async () => {
       let rooms = []; try { rooms = await N.verifiedPublicRooms(pubIdx); } catch (e) { /* keep empty */ }
       if (!alive) return;
-      pubList.replaceChildren(...(rooms.length ? rooms.map((r) => h("div", { class: "row between pub-row" },
+      rc(pubList, ...(rooms.length ? rooms.map((r) => h("div", { class: "row between pub-row" },
         h("span", {}, h("b", {}, `${r.host}'s room`), h("span", { class: "muted small" }, `  ${r.code} · ${r.players}/${R.MAX_PLAYERS} players${PACKS.length > 1 ? " · " + ((PACKS.find((p) => p.id === r.pack) || {}).name || r.pack) : ""}`)),
         r.players >= R.MAX_PLAYERS ? h("span", { class: "muted small" }, "Full") : h("button", { class: "btn primary", onclick: go(async () => { await enter(r.code, "player", need()); }) }, "Join"))) : [h("p", { class: "muted small" }, "No public lobbies right now. Create one, or join a private room with its code.")]));
     };
     if (N.configured) { pubUnsub = N.watchPublicRooms((idx) => { pubIdx = idx; renderPub(); }); pubTimer = setInterval(renderPub, 15000); }
     let heroEl = hero(PK, ENT.list);
-    const visSel = h("select", { title: "Private rooms need the code. Public rooms are listed on this page while they are still in the lobby." }, h("option", { value: "private" }, "Private (code only)"), h("option", { value: "public" }, "Public (listed)"));
+    const visSel = h("select", { title: "Private rooms need the code. Public rooms are listed on this page while they are still in the lobby." }, h("option", { value: "public" }, "Public (listed)"), h("option", { value: "private" }, "Private (code only)"));
+    visSel.value = "public";   // public by default: it is listed on the home screen while in the lobby; choose Private to need the code
     const modeSel = h("select", { onchange: () => drawOpts() }), optBox = h("div", { class: "create-opts" }), optSel = {};
     const modeList = () => M.modesFor(MODES, PK);
-    const drawModes = () => { modeSel.replaceChildren(...modeList().map((m) => h("option", { value: m.id }, M.titleOf(m, PK)))); drawOpts(); };
+    const drawModes = () => { rc(modeSel, ...modeList().map((m) => h("option", { value: m.id }, M.titleOf(m, PK)))); drawOpts(); };
     function drawOpts() {   // per-mode options chosen when the room is created (Pokémon war: auto or manual battles)
-      const md = modeList().find((m) => m.id === modeSel.value) || modeList()[0]; optBox.replaceChildren(); for (const k of Object.keys(optSel)) delete optSel[k];
+      const md = modeList().find((m) => m.id === modeSel.value) || modeList()[0]; rc(optBox); for (const k of Object.keys(optSel)) delete optSel[k];
       for (const o of (md && md.createOptions) || []) { const sel = h("select", {}, o.options.map((x) => h("option", { value: x.v, selected: x.v === o.default }, x.l))); optSel[o.id] = sel; optBox.append(h("label", {}, o.label, sel)); }
-      modeInfo.textContent = (md && md.description) || (PK.placeholder ? "Coming soon: this category has its look, but no playable mode yet." : "");
+      modeInfo.textContent = (md && M.descOf(md, PK)) || (PK.placeholder ? "Coming soon: this category has its look, but no playable mode yet." : "");
     }
     const modeInfo = h("p", { class: "muted small" });
     const tabs = h("div", { class: "vsel", role: "tablist", "aria-label": "Game version" }, PACKS.map((p) => h("button", { type: "button", role: "tab", class: "vtab" + (p.id === homePack ? " on" : ""), "data-pack": p.id, "aria-selected": String(p.id === homePack),
@@ -340,15 +373,15 @@ async function main() {
   screens.leaderboard = () => {
     const body = h("div", {}), res = h("div", {}), look = h("input", { placeholder: "Look up a name" });
     const row = (s, i) => h("tr", {}, h("td", {}, i == null ? "" : i + 1), h("td", {}, s.name || s.key), h("td", {}, s.tournaments_won || 0), h("td", {}, s.fights_won || 0), h("td", {}, s.fights_lost || 0), h("td", {}, s.fights_drawn || 0), h("td", {}, s.games_played || 0), h("td", {}, s.animals_drafted || 0));
-    const table = (rows, ranked) => h("div", { class: "scroll" }, h("table", { class: "tbl" }, h("thead", {}, h("tr", {}, ["#", "Player", "Titles", "W", "L", "D", "Games", "Drafted"].map((x) => h("th", {}, x)))), h("tbody", {}, rows.map((s, i) => row(s, ranked ? i : null)))));
+    const table = (rows, ranked) => h("div", { class: "scroll" }, h("table", { class: "tbl" }, h("thead", {}, h("tr", {}, ["#", "Player", "Titles", "Wins", "Losses", "Draws", "Games", "Picked"].map((x) => h("th", {}, x)))), h("tbody", {}, rows.map((s, i) => row(s, ranked ? i : null)))));
     screen(h("h1", {}, "Leaderboard"), h("button", { class: "btn small", onclick: () => { S.view = "home"; schedule(); } }, "Back"),
       h("div", { class: "card" }, h("div", { class: "row" }, look, h("button", {
         class: "btn", onclick: async () => {
-          try { const s = await N.lookupStats(look.value); res.replaceChildren(s ? table([s], false) : h("p", { class: "muted" }, "No stats for that name.")); } catch (e) { toast(e.message); }
+          try { const s = await N.lookupStats(look.value); rc(res, s ? table([s], false) : h("p", { class: "muted" }, "No stats for that name.")); } catch (e) { toast(e.message); }
         }
       }, "Find")), res), body);
     body.append(h("p", { class: "muted" }, "Loading…"));
-    N.topStats().then((rows) => body.replaceChildren(rows.length ? table(rows, true) : h("p", { class: "muted" }, "No games recorded yet."))).catch((e) => body.replaceChildren(h("p", { class: "muted" }, "Could not load: " + e.message)));
+    N.topStats().then((rows) => rc(body, rows.length ? table(rows, true) : h("p", { class: "muted" }, "No games recorded yet."))).catch((e) => rc(body, h("p", { class: "muted" }, "Could not load: " + e.message)));
     return { update() { } };
   };
 
@@ -361,7 +394,7 @@ async function main() {
     const inBal = num("startBalance", 10, 100000), inRos = num("rosterSize", (MD.rosterRange || {}).min ?? R.ROSTER_MIN, (MD.rosterRange || {}).max ?? R.ROSTER_MAX), inSec = num("auctionSeconds", 5, 120), inStall = num("stallLimit", R.STALL_MIN, R.STALL_MAX);
     const cbMystery = h("input", { type: "checkbox", onchange: (e) => edit((s) => { s.mysteryTraits = e.target.checked; }) });
     const selMode = h("select", { onchange: (e) => { if (isHost()) N.put(S.code, "meta/mode", e.target.value).catch((er) => toast(er.message)); } }, M.modesFor(MODES, PK).map((m) => h("option", { value: m.id }, M.titleOf(m, PK))));
-    const modeDesc = h("p", { class: "muted small" }, MD.description || "");
+    const modeDesc = h("p", { class: "muted small" }, M.descOf(MD, PK));
     const modePanel = MD.settingsPanel ? MD.settingsPanel({ h, edit, isHost, pack: PK }) : { nodes: [], refresh() {} };
     const buildFilter = (d) => {
       if (d.type === "chips") {
@@ -391,7 +424,7 @@ async function main() {
       const searchIn = h("input", { placeholder: `Search ${PK.nouns.plural} to exclude`, oninput: (e) => { search = e.target.value.toLowerCase(); draw(); } });
       function draw() {
         const ex = new Set(L.filters.excluded), items = ENT.list.filter((a) => !search || a.name.toLowerCase().includes(search) || a.id.includes(search)).slice(0, 150);
-        exList.replaceChildren(...items.map((a) => h("label", { class: "exrow" }, h("input", { type: "checkbox", checked: ex.has(a.id), onchange: (e) => edit((s) => { const set = new Set(s.filters.excluded); e.target.checked ? set.add(a.id) : set.delete(a.id); s.filters.excluded = [...set]; }) }), ` ${a.name}`)));
+        rc(exList, ...items.map((a) => h("label", { class: "exrow" }, h("input", { type: "checkbox", checked: ex.has(a.id), onchange: (e) => edit((s) => { const set = new Set(s.filters.excluded); e.target.checked ? set.add(a.id) : set.delete(a.id); s.filters.excluded = [...set]; }) }), ` ${a.name}`)));
         exCount.textContent = `${ex.size} excluded`;
       }
       return { nodes: [h("label", {}, d.label || `Exclude ${PK.nouns.plural}`, " ", exCount), searchIn, exList], draw, refresh(f) { exCount.textContent = `${f.excluded.length} excluded`; } };
@@ -411,10 +444,13 @@ async function main() {
       poolInfo.className = "poolinfo " + (ok ? "ok" : "bad"); poolInfo.textContent = MD.noDraft ? `Pool: ${n} ${PK.nouns.plural}` : `Pool: ${n} ${PK.nouns.plural} (need at least ${need} for ${Math.max(np, 2)} players × ${L.rosterSize} + ${R.POOL_MARGIN})`;
       startBtn.hidden = !host; startBtn.disabled = !(host && runner && ok && np >= 2);
     }
-    const draftBox = h("div", {}, h("div", { class: "grid2" }, h("label", {}, "Starting balance ($)", inBal), h("label", {}, "Roster size (3-8)", inRos), h("label", {}, "Auction seconds", inSec), h("label", {}, "Unsold lots in a row before a free lot", inStall)),
-      PK.traitsFile ? h("label", { class: "row" }, cbMystery, " Mystery traits: strength and weakness show as ??? while an animal is up for auction") : null);
+    const rosRange = MD.rosterRange || { min: R.ROSTER_MIN, max: R.ROSTER_MAX };
+    const rosLabel = h("label", {}, `${P.cap(rn())} size (${rosRange.min ?? R.ROSTER_MIN}-${rosRange.max ?? R.ROSTER_MAX})`, inRos);
+    rosLabel.hidden = !!MD.hideRosterBox;   // football: the Bench box in its own panel sets the squad size (11 + bench)
+    const draftBox = h("div", {}, h("div", { class: "grid2" }, h("label", {}, "Starting balance ($)", inBal), rosLabel, h("label", {}, "Auction seconds", inSec), h("label", {}, "Unsold lots in a row before a free lot", inStall)),
+      PK.traitsFile ? h("label", { class: "row" }, cbMystery, ` Mystery traits: strength and weakness show as ??? while ${/^[aeiou]/i.test(PK.nouns.singular) ? "an" : "a"} ${PK.nouns.singular} is up for auction`) : null);
     draftBox.hidden = !!MD.noDraft;
-    screen(h("div", { class: "card center" }, h("div", { class: "muted" }, "Room code"), h("div", { class: "bigcode" }, S.code), h("div", { class: "muted small" }, "Friends join with this code (max 6 players, 10 connections).")),
+    screen(h("div", { class: "card center" }, h("div", { class: "muted" }, "Room code"), h("div", { class: "bigcode" }, S.code), h("div", { class: "muted small" }, `Friends join with this code (max ${R.MAX_PLAYERS} players, ${R.MAX_CONNECTIONS} connections).`)),
       h("div", { class: "card" }, h("h3", {}, "Players"), plist, specInfo),
       h("div", { class: "card" }, h("h3", {}, "Settings"),
         h("label", {}, "Mode", selMode), modeDesc,
@@ -427,7 +463,7 @@ async function main() {
       update() {
         if (!pending) { const fresh = settings(); if (JSON.stringify(fresh) !== JSON.stringify(L)) { L = fresh; drawEx(); } }
         refresh();
-        plist.replaceChildren(...playersSorted().map((p) => h("div", { class: "row between" }, h("span", {}, h("span", { class: "dot " + (p.online ? "on" : "") }), ` ${p.name}`, S.host && S.host.key === p.key ? h("span", { class: "pill host" }, "host") : null),
+        rc(plist, ...playersSorted().map((p) => h("div", { class: "row between" }, h("span", {}, h("span", { class: "dot " + (p.online ? "on" : "") }), ` ${p.name}`, S.host && S.host.key === p.key ? h("span", { class: "pill host" }, "host") : null),
           isHost() && !p.online ? h("button", { class: "btn small", onclick: () => N.del(S.code, `players/${p.key}`) }, "Remove") : null)));
         specInfo.textContent = `${Object.keys(S.spectators || {}).length} spectator(s) watching`;
       }
@@ -446,7 +482,7 @@ async function main() {
     const skipBtn = h("button", { class: "btn", onclick: doSkip }, "Skip");
     const claimBtn = h("button", { class: "btn primary", onclick: async () => { const ok = await N.claimFree(S.code, S.key); if (!ok) toast("Too late to claim."); } }, "Claim free");
     const bidBox = h("div", { class: "card bidbox" }, h("div", { class: "quickrow" }, quick("+1", () => topAmt() + 1), quick("+5", () => topAmt() + 5), quick("+10", () => topAmt() + 10), quick("Max", () => +bidIn.max)), h("div", { class: "bidrow" }, bidIn, bidBtn, skipBtn));
-    const claimBox = h("div", { class: "card claimbox" }, h("p", { class: "small" }, ""), h("div", { class: "row" }, claimBtn, h("button", { class: "btn", onclick: doSkip }, "Skip")));
+    const claimBox = h("div", { class: "card claimbox" }, h("div", { class: "row" }, claimBtn, h("button", { class: "btn", onclick: doSkip }, "Skip")));
     const idleBox = h("div", { class: "idlebox" }, "Your bid controls appear here");
     const slot = h("div", { class: "actionslot" }, bidBox, claimBox, idleBox);
     const tbl = h("div", { class: "card d-tbl" }), logBox = h("div", { class: "card d-log" }), rosters = h("div", { class: "card d-ros" });
@@ -463,10 +499,10 @@ async function main() {
         const active = A && !A.resolved && A.id === (L.drawIndex || 0), a = A && ENT.map.get(A.animalId);
         { const pool = arr(G.pool), di = L.drawIndex || 0; preload(pool.slice(di, di + 4).map((id) => cardImage(PK, ENT.map.get(id)))); }   // the current lot first, then the next three: ready before they are dealt
         if (A && A.id !== lastId) { lastId = A.id; barMax = Math.max(1000, A.deadline - N.now()); bidTouched = false; }
-        topInfo.replaceChildren(h("div", { class: "lotbar" }, h("span", { class: "lotno" }, `Lot ${Math.min((L.drawIndex || 0) + 1, arr(G.pool).length)} of ${arr(G.pool).length}`), L.stall ? h("span", { class: "pill" }, `${L.stall} of ${settings().stallLimit ?? R.STALL_LIMIT} unsold in a row`) : null),
-          S.role === "player" ? h("div", { class: "purse" }, h("b", {}, `$${bal[me] ?? 0}`), h("span", { class: "muted" }, `left, roster ${arr(ros[me]).length} of ${st.rosterSize}`)) : h("div", { class: "pill" }, "spectating"), S.role === "player" && PK.draftTip ? h("p", { class: "fb-tip" }, PK.draftTip(arr(ros[me]).map((x) => ENT.map.get(x.id)).filter(Boolean), st.rosterSize)) : null);
+        rc(topInfo, h("div", { class: "lotbar" }, h("span", { class: "lotno" }, `Lot ${Math.min((L.drawIndex || 0) + 1, arr(G.pool).length)} of ${arr(G.pool).length}`), L.stall ? h("span", { class: "pill" }, `${L.stall} of ${settings().stallLimit ?? R.STALL_LIMIT} unsold in a row`) : null),
+          S.role === "player" ? h("div", { class: "purse" }, h("b", {}, `$${bal[me] ?? 0}`), h("span", { class: "muted" }, `left, ${rn()} ${arr(ros[me]).length} of ${st.rosterSize}`)) : h("div", { class: "pill" }, "spectating"), S.role === "player" && PK.draftTip ? h("p", { class: "fb-tip" }, PK.draftTip(arr(ros[me]).map((x) => ENT.map.get(x.id)).filter(Boolean), st.rosterSize)) : null);
         const sold = A && A.resolved && A.outcome && A.outcome.winner ? ENT.map.get(A.outcome.animalId) : null;   // mystery traits: the bought animal is shown once with its traits revealed
-        cardBox.replaceChildren(active && a ? animalCard(a, false, null, !!st.mysteryTraits) : sold && st.mysteryTraits ? animalCard(sold, false, null, false) : animalCard(null, false, A && A.resolved && A.outcome ? "Resolved…" : `Next ${PK.nouns.singular}…`));
+        rc(cardBox, active && a ? animalCard(a, false, null, !!st.mysteryTraits) : sold && st.mysteryTraits ? animalCard(sold, false, null, false) : animalCard(null, false, A && A.resolved && A.outcome ? "Resolved…" : `Next ${PK.nouns.singular}…`));
         const isPart = !!(A && A.participants && A.participants[me]), elig = !!(A && A.eligible && A.eligible[me]), skipped = !!(A && A.skips && A.skips[me]), top = A && A.top;
         const iTop = top && top.key === me, isPlayer = S.role === "player";
         const inClaim = !!(active && A.status === "claim" && A.claim && A.claim.key === me && !A.claim.taken && !A.claim.declined);
@@ -474,27 +510,27 @@ async function main() {
         if (!active) m = L.last ? L.last.text : "";
         else if (A.status === "claim") m = A.claim && A.claim.key === me ? "You are the last one left: claim it free or skip." : `${nameOf(A.claim && A.claim.key)} may claim it for free…`;
         else if (!isPlayer) m = top ? `Top bid: $${top.amt} by ${nameOf(top.key)}` : "No bids yet";
-        else if (!isPart) m = "Your roster is full. Sit this one out.";
+        else if (!isPart) m = `Your ${rn()} is full. Sit this one out.`;
         else if (skipped) m = `You skipped this ${PK.nouns.singular}.`;
         else if (!elig) m = "You are broke: you can only Skip or Claim.";
         else if (iTop) m = `You are the top bidder at $${top.amt}.`;
         else m = top ? `Top bid: $${top.amt} by ${nameOf(top.key)}` : "No bids yet. Open the bidding!";
         msg.textContent = m;
-        bigBid.replaceChildren(...(active && A.status === "bidding" ? [top ? h("span", { class: "amt" }, `$${top.amt}`) : h("span", { class: "amt none" }, "No bids yet"), top ? h("span", { class: "who" }, nameOf(top.key) + (iTop ? " (you)" : "")) : null].filter(Boolean) : []));
+        rc(bigBid, ...(active && A.status === "bidding" ? [top ? h("span", { class: "amt" }, `$${top.amt}`) : h("span", { class: "amt none" }, "No bids yet"), top ? h("span", { class: "who" }, nameOf(top.key) + (iTop ? " (you)" : "")) : null].filter(Boolean) : []));
         const canBid = isPlayer && active && A.status === "bidding" && elig && !skipped, minBid = topAmt() + R.MIN_BID, limit = (A && A.limits && A.limits[me]) || 0;
         bidBox.hidden = !(isPlayer && active && A.status === "bidding" && isPart);
         claimBox.hidden = !inClaim;
         idleBox.hidden = !(isPlayer && bidBox.hidden && claimBox.hidden); slot.classList.toggle("on", isPlayer);
         bidIn.min = minBid; bidIn.max = limit; if (!bidTouched || +bidIn.value < minBid) bidIn.value = Math.min(minBid, Math.max(limit, 1));
         bidBtn.disabled = !canBid || minBid > limit; skipBtn.disabled = !(isPlayer && active && A.status === "bidding" && isPart && !skipped && !iTop); bidIn.disabled = !canBid;
-        tbl.replaceChildren(h("h3", {}, "Players"), ...(G.keys ? arr(G.keys) : []).map((k) => {
+        rc(tbl, h("h3", {}, "Players"), ...(G.keys ? arr(G.keys) : []).map((k) => {
           const tags = []; if (A && active) { if (A.top && A.top.key === k) tags.push("top"); if (A.skips && A.skips[k]) tags.push("skipped"); if (A.participants && !A.participants[k]) tags.push("full"); if (A.participants && A.participants[k] && !(A.eligible && A.eligible[k])) tags.push("broke"); }
           if (S.players && S.players[k] && !S.players[k].online) tags.push("offline");
           return h("div", { class: "row between" }, h("span", {}, nameOf(k), k === me ? h("span", { class: "pill you" }, "you") : null), h("span", { class: "muted" }, `$${bal[k] ?? 0} with ${arr(ros[k]).length}/${st.rosterSize} ${PK.nouns.plural} `, tags.map((t) => h("span", { class: "pill " + t }, t))));
         }));
         const entries = Object.entries(L.log || {}).sort((x, y) => +y[0] - +x[0]).slice(0, 8);
-        logBox.replaceChildren(h("h3", {}, "Draft log"), ...entries.map(([, t]) => h("div", { class: "logline" + (t.startsWith("STALL") ? " stall" : "") }, t)));
-        rosters.replaceChildren(h("h3", {}, "Rosters"), ...(G.keys ? arr(G.keys) : []).map((k) => h("details", { open: k === me }, h("summary", {}, `${nameOf(k)} (${arr(ros[k]).length})`),
+        rc(logBox, h("h3", {}, "Draft log"), ...entries.map(([, t]) => h("div", { class: "logline" + (t.startsWith("STALL") ? " stall" : "") }, t)));
+        rc(rosters, h("h3", {}, P.cap(rns())), ...(G.keys ? arr(G.keys) : []).map((k) => h("details", { open: k === me }, h("summary", {}, `${nameOf(k)} (${arr(ros[k]).length})`),
           ...arr(ros[k]).map((x) => { const an = ENT.map.get(x.id); return h("div", { class: "row between small" }, h("span", {}, an && PK.rosterTag ? [h("span", { class: "pill rtag" }, PK.rosterTag(an)), " "] : null, an ? an.name : x.id), h("span", { class: "muted" }, x.price ? `$${x.price}` : "free")); }))));
       }
     };
@@ -542,7 +578,7 @@ async function main() {
       grip.addEventListener("pointermove", move); grip.addEventListener("pointerup", end); grip.addEventListener("pointercancel", end);
     }
     function drawRows() {
-      rowsBox.replaceChildren(...order.map((id, i) => {
+      rc(rowsBox, ...order.map((id, i) => {
         const a = ENT.map.get(id) || { name: id, emoji: "?" };
         const grip = h("button", { class: "grip", type: "button", "aria-label": `Move ${a.name}. Drag, or use the arrow keys.`, title: "Drag to reorder", onpointerdown: (e) => startDrag(e, i), onkeydown: (e) => gripKey(e, i) });
         const sl = MD.lineup && MD.lineup.slot ? MD.lineup.slot(i, a, uiCtx) : null;   // a mode may label slots (race: leg per slot)
@@ -559,8 +595,8 @@ async function main() {
           const sub = S.lineups && S.lineups[S.key] ? arr(S.lineups[S.key].order) : [];
           order = sub.length === mine.length && [...sub].sort().join() === [...mine].sort().join() ? sub : mine.slice(); draw();
         }
-        if (isP && !mine.length) rowsBox.replaceChildren(h("p", { class: "muted" }, `You drafted no ${PK.nouns.plural}, so you sit out the tournament.`));
-        const ready = S.lineups || {}; status.replaceChildren(h("h3", {}, "Players"), ...arr(S.game && S.game.keys).map((k) => h("div", { class: "row between" }, nameOf(k), h("span", { class: "muted" }, ready[k] && ready[k].done ? "ready" : "arranging…"))));
+        if (isP && !mine.length) rc(rowsBox, h("p", { class: "muted" }, `You drafted no ${PK.nouns.plural}, so you sit out the tournament.`));
+        const ready = S.lineups || {}; rc(status, h("h3", {}, "Players"), ...arr(S.game && S.game.keys).map((k) => h("div", { class: "row between" }, nameOf(k), h("span", { class: "muted" }, ready[k] && ready[k].done ? "ready" : "arranging…"))));
         readyBtn.textContent = S.lineups && S.lineups[S.key] && S.lineups[S.key].done ? "Ready (tap to change)" : "Ready";
       }
     };
@@ -570,13 +606,13 @@ async function main() {
   screens.results = () => {
     const body = h("div", { class: "card" });
     screen(h("h1", {}, "Results"), body, h("button", { class: "btn primary", onclick: () => leave() }, "Leave room"));
-    return { update() { const r = (S.game && S.game.results) || {}, sc = r.scores || {}; body.replaceChildren(...arr(r.order).map((k, i) => h("div", { class: "row between" }, h("span", {}, `${i + 1}. ${nameOf(k)}`), h("b", {}, sc[k] ?? ""))), ...(arr(r.order).length ? [] : [h("p", { class: "muted" }, "No results recorded.")])); } };
+    return { update() { const r = (S.game && S.game.results) || {}, sc = r.scores || {}; rc(body, ...arr(r.order).map((k, i) => h("div", { class: "row between" }, h("span", {}, `${i + 1}. ${nameOf(k)}`), h("b", {}, sc[k] ?? ""))), ...(arr(r.order).length ? [] : [h("p", { class: "muted" }, "No results recorded.")])); } };
   };
 
   // ================= CHAT =================
   const chatList = $("#chatlist"), chatIn = $("#chatin");
   function chatUpdate() {
-    chatList.replaceChildren(...S.chat.map((m) => h("div", { class: "msg" }, h("b", {}, m.name), m.spec ? h("span", { class: "pill" }, "spectator") : null, ": " + m.text)));
+    rc(chatList, ...S.chat.map((m) => h("div", { class: "msg" }, h("b", {}, m.name), m.spec ? h("span", { class: "pill" }, "spectator") : null, ": " + m.text)));
     chatList.scrollTop = chatList.scrollHeight;
   }
   $("#chatform").addEventListener("submit", async (e) => {

@@ -8,8 +8,9 @@ const ART = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/po
 const SPR = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/";
 const cap = (s) => String(s || "").charAt(0).toUpperCase() + String(s || "").slice(1);
 const TYPE_BG = { normal: "#c3c3a8", fire: "#ff9a55", water: "#6fa8ff", electric: "#ffe04a", grass: "#7fdc6a", ice: "#9ae8ee", fighting: "#e0645c", poison: "#c27ad8", ground: "#e2c06a", flying: "#b4a8f5", psychic: "#ff7fa8", bug: "#b5d84a", rock: "#c9b26a", ghost: "#9c84c4", dragon: "#8a6cff", dark: "#9a8274", steel: "#b9c2d4", fairy: "#f5a8d8", typeless: "#ccc" };
-const STAT_LBL = { atk: "Atk", def: "Def", spa: "SpA", spd: "SpD", spe: "Spe", acc: "Acc", eva: "Eva" };
-const ST_LBL = { par: "PAR", brn: "BRN", psn: "PSN", tox: "TOX", slp: "SLP", frz: "FRZ" };
+// Battle badges use whole words (no PAR / BRN / SpA / Spe): a badge is read in the middle of a fast animation.
+const STAT_LBL = { atk: "Attack", def: "Defense", spa: "Sp. Attack", spd: "Sp. Defense", spe: "Speed", acc: "Accuracy", eva: "Evasion" };
+const ST_LBL = { par: "Paralysis", brn: "Burn", psn: "Poison", tox: "Bad poison", slp: "Sleep", frz: "Freeze" };
 
 // DOM replaceChildren() turns null into the text "null": always go through rc()
 const rc = (el, ...kids) => el.replaceChildren(...kids.filter((k) => k != null && k !== false));
@@ -22,7 +23,7 @@ export default function createScreens(ctx) {
   const tp = (t) => h("span", { class: "tpill", style: `background:${TYPE_BG[t] || "#ccc"};color:#070c0b` }, cap(t));
   const img = (src, cls, e) => h("img", { class: cls, src, alt: e ? e.name : "", loading: "lazy", onerror: (ev) => { if (e && e.imageAlt && !ev.target.dataset.fb) { ev.target.dataset.fb = "1"; ev.target.src = e.imageAlt; } else ev.target.replaceWith(h("span", { class: "emoji" }, e ? e.emoji : "?")); } });
   const catIcon = (c) => (c === "physical" ? "💥" : c === "special" ? "✨" : "◌");
-  const fmtMove = (m) => `${m.p == null ? "—" : m.p} pow · ${m.a == null ? "—" : m.a}% · ${m.pp} PP`;
+  const fmtMove = (m) => `Power ${m.p == null ? "—" : m.p} · Accuracy ${m.a == null ? "—" : m.a + "%"} · ${m.pp} uses`;
 
   // =============== LINEUP (order + moves + ability) ===============
   function lineupScreen() {
@@ -54,9 +55,12 @@ export default function createScreens(ctx) {
       if (!order || !D) return;
       rc(rowsBox, ...order.map((id, i) => {
         const e = ent(id), st = setOf(e), names = st.moves.map((m) => (D.moves[m] || {}).n).filter(Boolean).join(" · ");
-        return h("div", { class: "pk-lrow" }, h("div", { class: "pk-lhead" }, h("span", { class: "pk-pos" }, i + 1), ctx.icon(e), h("div", { class: "grow" }, h("b", {}, e.name), h("div", { class: "row wrap" }, e.types.map(tp)), h("small", { class: "muted" }, names || "no moves")),
-          h("button", { class: "btn small", type: "button", "aria-label": "Move up", disabled: i === 0, onclick: () => move(i, -1) }, "↑"), h("button", { class: "btn small", type: "button", "aria-label": "Move down", disabled: i === order.length - 1, onclick: () => move(i, 1) }, "↓"),
-          h("button", { class: "btn small", type: "button", onclick: () => { open = open === id ? null : id; draw(); } }, open === id ? "Close" : "Moves")), open === id ? movesPanel(e) : null);
+        return h("div", { class: "pk-lrow" }, h("div", { class: "pk-lhead" }, h("span", { class: "pk-pos" }, i + 1), ctx.icon(e), h("div", { class: "grow" }, h("b", {}, e.name), h("div", { class: "row wrap" }, e.types.map(tp)))),
+          h("p", { class: "pk-lmoves muted small" }, names || "No moves chosen"),
+          h("div", { class: "pk-lact" },
+            h("div", { class: "pk-seg" }, h("button", { class: "btn small", type: "button", "aria-label": `Move ${e.name} up`, disabled: i === 0, onclick: () => move(i, -1) }, "↑"), h("button", { class: "btn small", type: "button", "aria-label": `Move ${e.name} down`, disabled: i === order.length - 1, onclick: () => move(i, 1) }, "↓")),
+            h("button", { class: "btn small pk-edit", type: "button", "aria-expanded": String(open === id), onclick: () => { open = open === id ? null : id; draw(); } }, open === id ? "Close moves" : "Edit moves")),
+          open === id ? movesPanel(e) : null);
       }));
     }
     return {
@@ -115,10 +119,10 @@ export default function createScreens(ctx) {
         if (P.shown !== m.id) { P.shown = m.id; P.sprite.replaceWith(P.sprite = img(e.image || ART + m.pid + ".png", "pk-sprite", e)); }
         P.sprite.classList.toggle("fnt", !!m.fnt);
         const f = m.hp / m.max; P.nm.textContent = `${m.name}`; P.hpT.textContent = `${m.hp}/${m.max}`; P.fill.style.width = (100 * f) + "%"; P.fill.className = f < 0.2 ? "low" : f < 0.5 ? "mid" : "";
-        const b = []; if (m.st) b.push(h("span", { class: "pk-b " + m.st }, ST_LBL[m.st])); if (m.sub) b.push(h("span", { class: "pk-b env" }, "SUB"));
+        const b = []; if (m.st) b.push(h("span", { class: "pk-b " + m.st }, ST_LBL[m.st])); if (m.sub) b.push(h("span", { class: "pk-b env" }, "Substitute"));
         for (const [k, d] of Object.entries(m.stg)) if (d) b.push(h("span", { class: "pk-b " + (d > 0 ? "up" : "dn") }, `${STAT_LBL[k]} ${d > 0 ? "+" : ""}${d}`));
         rc(P.badges, ...b);
-        const ev = []; const hz = sd.hz; if (hz.rocks) ev.push("Rocks"); if (hz.spikes) ev.push("Spikes ×" + hz.spikes); if (hz.tspikes) ev.push("Toxic spikes"); if (hz.web) ev.push("Web");
+        const ev = []; const hz = sd.hz; if (hz.rocks) ev.push("Stealth Rock"); if (hz.spikes) ev.push("Spikes ×" + hz.spikes); if (hz.tspikes) ev.push("Toxic spikes"); if (hz.web) ev.push("Sticky Web");
         if (sd.scr.reflect > 0) ev.push("Reflect"); if (sd.scr.light > 0) ev.push("Light Screen"); if (sd.scr.veil > 0) ev.push("Aurora Veil"); if (sd.scr.tailwind > 0) ev.push("Tailwind");
         rc(P.env, ...ev.map((x) => h("span", { class: "pk-b env" }, x)));
         rc(P.team, ...sd.team.map((t, i) => h("i", { class: (t.fnt ? "fnt " : "") + (i === sd.active ? "cur" : ""), title: `${t.name} ${t.hp}/${t.max}` })));
@@ -167,7 +171,7 @@ export default function createScreens(ctx) {
         subs.push(N.watch(S.code, `pkb/${f.id}`, (v) => { B = v; schedule(); }));
       }
     }
-    const vsHeader = (f) => h("div", { class: "pk-vs" }, h("b", {}, nameOf(f.a)), h("span", { class: "muted" }, "vs"), h("b", {}, nameOf(f.b)), h("span", { class: "pill" }, f.label || "Battle"), h("span", { class: "pill" }, f.style === "manual" ? "manual" : "auto"));
+    const vsHeader = (f) => h("div", { class: "pk-vs" }, h("b", {}, nameOf(f.a)), h("span", { class: "muted" }, "vs"), h("b", {}, nameOf(f.b)), h("span", { class: "pill" }, f.label || "Battle"), h("span", { class: "pill" }, f.style === "manual" ? "Manual" : "Auto"));
 
     function manualSync(f) {
       if (!B || !V) return;
@@ -200,8 +204,9 @@ export default function createScreens(ctx) {
       if (mv.length && st.phase !== "replace") kids.push(h("div", { class: "pk-moves" }, mv.map((c) => {
         const slot = c.i === -1 ? null : me.moves[c.i], m = c.i === -1 ? { n: "Struggle", t: "normal", c: "physical", p: 50, a: null, pp: 1 } : D.moves[slot.id];
         const eff = m.c !== "status" && c.i !== -1 ? E.typeEff(m.t, foe.types, m) : 1;
-        return h("button", { class: "pk-mbtn", type: "button", style: `background:${TYPE_BG[m.t] || "#ccc"}`, title: m.d || "", onclick: () => send(c) },
-          h("b", {}, m.n), h("small", {}, `${cap(m.t)} · ${catIcon(m.c)} ${m.p == null ? "—" : m.p} pow · ${m.a == null ? "—" : m.a}% · PP ${slot ? slot.pp + "/" + slot.max : "∞"}`), eff !== 1 ? h("span", { class: "pk-eff" }, eff === 0 ? "no effect" : eff > 1 ? "×" + eff : "×" + (eff === 0.5 ? "½" : "¼")) : null);
+        return h("button", { class: "pk-mbtn", type: "button", style: `background:${TYPE_BG[m.t] || "#ccc"}`, title: (m.d ? m.d + " " : "") + `(Accuracy ${m.a == null ? "—" : m.a + "%"})`, onclick: () => send(c) },
+          h("b", {}, m.n), eff !== 1 ? h("span", { class: "pk-eff" }, eff === 0 ? "No effect" : eff > 1 ? "Super effective ×" + eff : "Not very effective") : h("span"),
+          h("small", {}, `${cap(m.t)} · ${catIcon(m.c)} ${m.p == null ? "—" : m.p} power`), h("small", { class: "pk-pp" }, `${slot ? slot.pp + "/" + slot.max : "∞"} uses left`));
       })));
       if (sw.length) kids.push(h("div", {}, h("p", { class: "muted small" }, st.phase === "replace" ? "Your Pokémon fainted:" : "Or switch:"), h("div", { class: "pk-bench" }, sw.map((c) => { const t = st.sides[mySide].team[c.i], e = ent(t.id); return h("button", { class: "pk-bbtn", type: "button", onclick: () => send(c) }, ctx.icon(e), h("span", { class: "grow" }, h("b", {}, t.name), h("div", { class: "pk-hpbar" }, h("i", { style: `width:${100 * t.hp / t.max}%` })))); }))));
       rc(ctl, ...kids);
@@ -223,7 +228,7 @@ export default function createScreens(ctx) {
         if (!f) { if (curId || !stage.firstChild || stage.dataset.b !== T.state) { stage.dataset.b = T.state; between(T); } rc(head, h("span", { class: "qz-step" }, "Battle phase"), h("span", { class: "pill" }, ({ awaitNext: "between battles", finishing: "wrapping up", done: "finished" })[T.state] || T.state)); ctl.hidden = true; return; }
         stage.dataset.b = "";
         if (f.id !== curId) setup(f);
-        rc(head, h("span", { class: "qz-step" }, `${f.label || "Battle"}`), h("span", { class: "pill" }, f.style === "manual" ? "manual battle" : "auto battle"));
+        rc(head, h("span", { class: "qz-step" }, `${f.label || "Battle"}`), h("span", { class: "pill" }, f.style === "manual" ? "Manual battle" : "Auto battle"));
         if (!V) { prepare(T, f); }
         if (mode === "manual") { manualSync(f); controls(f); } else ctl.hidden = true;
         rc(side);
@@ -247,11 +252,12 @@ export default function createScreens(ctx) {
   // =============== RESULTS ===============
   function resultsScreen() {
     const body = h("div", { class: "card" });
-    screen(h("h1", {}, "Results"), body, h("button", { class: "btn primary", onclick: () => ctx.leave() }, "Leave room"));
-    return { update() {
+    const again = ctx.playAgainBar({ same: true });
+    screen(h("h1", {}, "Results"), body, again.el, h("button", { class: "btn", onclick: () => ctx.leave() }, "Leave room"));
+    return { update() { again.update();
       const r = (S.game && S.game.results) || {}, sc = r.scores || {}, T = S.tour || {}, ch = arr(r.champion);
       rc(body, ch.length ? h("p", { class: "pk-banner" }, `🏆 ${ch.map(nameOf).join(" & ")}`) : null,
-        ...arr(r.order).map((k, i) => h("div", { class: "pk-lrow" }, h("div", { class: "row between" }, h("b", {}, `${i + 1}. ${nameOf(k)}`), h("span", {}, `${sc[k] ?? 0} pts`)), h("div", { class: "row wrap" }, arr(T.lineups && T.lineups[k]).map((id) => ctx.icon(ent(id)))))),
+        ...arr(r.order).map((k, i) => h("div", { class: "pk-lrow" }, h("div", { class: "row between" }, h("b", {}, `${i + 1}. ${nameOf(k)}`), h("span", {}, `${sc[k] ?? 0} pts`)), h("div", { class: "row wrap pk-rteam" }, arr(T.lineups && T.lineups[k]).map((id) => { const e = ent(id); return e.image ? img(e.image, "sil color", e) : ctx.icon(e); })))),
         arr(r.order).length ? null : h("p", { class: "muted" }, "No results recorded."));
     } };
   }

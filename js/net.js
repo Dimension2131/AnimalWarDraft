@@ -116,7 +116,7 @@ export async function joinRoom(code, name, wantRole) {
     if (Object.keys(players).length > R.MAX_PLAYERS && pres.snapshot.val().sid === sid && !(meta.settings && players[key] && players[key].old)) {
       const mine = players[key];
       const earlier = Object.entries(players).filter(([k, p]) => k !== key && (p.joinedAt || 0) <= (mine.joinedAt || 0)).length;
-      if (earlier >= R.MAX_PLAYERS) { await remove(rp(code, `players/${key}`)); await remove(rp(code, `conns/${sid}`)); throw new Error("Room already has 6 players. Join as spectator."); }
+      if (earlier >= R.MAX_PLAYERS) { await remove(rp(code, `players/${key}`)); await remove(rp(code, `conns/${sid}`)); throw new Error(`Room already has ${R.MAX_PLAYERS} players. Join as spectator.`); }
     }
     onDisconnect(rp(code, `players/${key}/online`)).set(false);
   } else {
