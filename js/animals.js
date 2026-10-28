@@ -12,7 +12,7 @@ function warm(pack) {
   for (const f of pack.entityFiles || []) get(f);
   if (pack.traitsFile) get(pack.traitsFile);
   if (pack.silhouetteMap) get(pack.silhouetteMap);
-  for (const f of [].concat(pack.imageMap || [])) get(f);
+  const maps = [].concat(pack.imageMap || []); if (maps.length) get(maps[0]);   // only the first (preferred) photo map is requested up front; fallbacks are fetched by attachImages only if it is missing, so a leftover old name never causes a 404
   return get;
 }
 
@@ -76,5 +76,3 @@ export async function loadPackData(id) {
   })());
   return cache.get(pack.id);
 }
-
-// (No top-level await any more: it blocked every importer of this module until the default pack had fully loaded.)
