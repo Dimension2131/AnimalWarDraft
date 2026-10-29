@@ -242,5 +242,20 @@
   eb.onclick = () => { R.classList.toggle('bgonly'); eb.setAttribute('aria-pressed', R.classList.contains('bgonly')); };
   addEventListener('keydown', e => { if (e.key === 'Escape' && R.classList.contains('bgonly')) { R.classList.remove('bgonly'); eb.setAttribute('aria-pressed', false); } });
   ['home_R', 'home_L', 'away_R', 'away_L', 'ball'].forEach(k => img('basketball_' + k + '.png'));
+  // Inside a room the top bar is on screen: dock the eye and light/dark buttons into it, just left of the Leave button (wide screens only; elsewhere they keep their corner spots).
+  const tbar = document.getElementById('topbar'), tbn = document.getElementById('themeBtn');
+  function dock() {
+    const lv = tbar && tbar.querySelector('.btn:last-child'), on = lv && tbar.offsetParent !== null && innerWidth > 640 && !R.classList.contains('bgonly'), bs = [tbn, eb].filter(Boolean);
+    if (!on) { bs.forEach(b => ['top', 'right', 'width', 'height'].forEach(k => b.style.removeProperty(k))); return; }
+    const tr = tbar.getBoundingClientRect(), lr = lv.getBoundingClientRect(), sz = Math.max(28, Math.min(44, Math.round(tr.height - 12))), top = Math.round(tr.top + (tr.height - sz) / 2);
+    let right = R.clientWidth - lr.left + 8;
+    for (const b of bs) { b.style.setProperty('top', top + 'px'); b.style.setProperty('right', Math.round(right) + 'px'); b.style.setProperty('width', sz + 'px'); b.style.setProperty('height', sz + 'px'); right += sz + 8; }
+  }
+  if (tbar) {
+    new MutationObserver(dock).observe(tbar, { childList: true, subtree: true });
+    new MutationObserver(dock).observe(R, { attributes: true, attributeFilter: ['class'] });
+    if (window.ResizeObserver) new ResizeObserver(dock).observe(tbar);
+    addEventListener('resize', dock); if (document.fonts && document.fonts.ready) document.fonts.ready.then(dock); dock();
+  }
   size(); if (!still) requestAnimationFrame(loop);
 })();
