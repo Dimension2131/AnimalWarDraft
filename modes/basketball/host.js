@@ -80,8 +80,8 @@ export function createHost(ctx) {
       const f = T.fights[id]; if (!f || f.final) continue;
       if (!cache[f.id]) cache[f.id] = planOf(map, T, f, [nm(f.a), nm(f.b)]);
       const plan = cache[f.id];
-      // the game ends at its natural end, or as soon as both coaches have skipped to the final buzzer (an offline coach does not hold it up). The skip flag lives in the coach's own lineups node: lineups/<key>/skip = fight id.
-      const done = (k) => ((S.lineups || {})[k] || {}).skip === f.id || !((S.players || {})[k] || {}).online;
+      // the game ends at its natural end, or as soon as both coaches have skipped to the final buzzer (an offline coach does not hold it up). The skip flag lives in the coach's own lineups node: lineups/<key>/skip = "<fight id>:<fight seed>" (the seed makes a skip left over from an earlier tournament harmless).
+      const token = `${f.id}:${f.seed}`, done = (k) => ((S.lineups || {})[k] || {}).skip === token || !((S.players || {})[k] || {}).online;
       if (N.now() >= f.startAt + plan.endMs || (N.now() >= f.startAt && plan.durMs > 0 && done(f.a) && done(f.b))) return finishFight(f, plan);
     }
   }

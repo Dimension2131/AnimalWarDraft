@@ -85,6 +85,25 @@ const CSS = `
 .bb-row-vs{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap}
 .bb-br .bb-brm.me{background:rgba(255,179,71,.12)}.bb-br b.win{color:var(--yellow,#ffb347)}
 .bb-rank{margin:6px 0;padding-left:1.4rem}
+.bb-viewer{display:grid;gap:6px}
+.bb-view{position:relative;width:100%;aspect-ratio:94/50;max-height:70vh;margin:0 auto;background:#17110d;border:2px solid var(--edge,#ccc);overflow:hidden}
+.bb-canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+@media (orientation:portrait){.bb-view{aspect-ratio:50/94;max-height:72vh;max-width:min(100%,calc(72vh * 50 / 94))}}
+.bb-ov{position:absolute;left:0;right:0;top:8%;display:flex;justify-content:center;pointer-events:none;padding:0 8px}
+.bb-ov[hidden]{display:none}
+.bb-card{background:rgba(18,10,5,.92);color:#fff;border:2px solid var(--edge,#ccc);padding:8px 14px;text-align:center;max-width:94%;animation:bb-in .25s ease-out}
+.bb-card.hot{border-color:var(--yellow,#ffb347)}
+.bb-card.cover{padding:12px 22px}
+.bb-who{align-items:center;justify-content:center;gap:10px}
+.bb-who .bb-plate{width:56px;height:56px}
+.bb-big2{font:800 1.2rem var(--display,inherit);margin:4px 0}
+.bb-ctl{justify-content:center;gap:8px}
+.bb-log div.colour{font-style:italic;border-left-color:var(--blue,#4aa3ff)}
+.bb-log div.hot{font-weight:700}
+.bb-log div.block,.bb-log div.steal{border-left-color:var(--teal,#35e0c0)}
+.bb-log div.foul{border-left-color:#ff6a4d}
+@keyframes bb-in{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.bb-card{animation:none}}
 @media (max-width:520px){.bb-slot img{width:38px;height:38px}.bb-court .bb-slot{width:clamp(54px,17%,70px)}.bb-score .big{font-size:2rem}.bb-st-row{grid-template-columns:4rem 1fr 4rem}}
 `;
 export function ensureStyles() {

@@ -6,7 +6,9 @@ import { QUARTER_SECS, OT_SECS, REG_SECS } from "./engine.js";
 export const SPEEDS = {
   instant: { id: "instant", label: "Instant", note: "final score and a box score, about 10 s", ms: 0 },
   quick: { id: "quick", label: "Quick replay", note: "the whole game in about 2 minutes", ms: 120000 },
-  full: { id: "full", label: "Full replay", note: "the whole game in about 5 minutes", ms: 300000 }
+  full: { id: "full", label: "Full replay", note: "the whole game in about 5 minutes", ms: 300000 },
+  detailed: { id: "detailed", label: "Detailed", note: "most possessions shown at a followable pace, about 10 minutes", ms: 600000 },
+  broadcast: { id: "broadcast", label: "Broadcast", note: "every possession played out, about 20 minutes", ms: 1200000 }
 };
 export const SPEED_IDS = Object.keys(SPEEDS);
 export const normSpeed = (s) => (SPEEDS[s] ? s : "quick");

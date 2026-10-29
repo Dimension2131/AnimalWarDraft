@@ -5,6 +5,8 @@ import * as P from "./replay.js";
 import { teamRows, leaders, quarterTable } from "./stats.js";
 import { photo, subDetails, ratingBar } from "./card.js";
 import { ensureStyles } from "./styles.js";
+import * as C from "./choreo.js";
+import { createViewer } from "./viewer.js";
 
 // DOM replaceChildren() turns null into the text "null": always go through rc()
 const rc = (el, ...kids) => el.replaceChildren(...kids.filter((k) => k != null && k !== false));
@@ -16,7 +18,7 @@ export default function createScreens(ctx) {
   const sameIds = (a, b) => a.length === b.length && [...a].sort().join() === [...b].sort().join();
   const posMode = () => E.normPosMode((S.tour && S.tour.posMode) || ctx.settings().posMode);
   // Where the five stand on the half court (percent of the court, the basket is at the top). Slot order = slotsOf(mode).
-  const SPOTS = { strict: [[50, 83], [83, 62], [17, 62], [69, 36], [38, 20]], groups: [[32, 80], [68, 80], [14, 50], [86, 50], [50, 22]], open: [[50, 83], [82, 62], [18, 62], [68, 34], [34, 34]] };
+  const SPOTS = C.SPOTS;   // where each slot stands (the match viewer's choreography uses the same table)
   const tipOf = (node, text) => { if (node && node.setAttribute) node.setAttribute("title", text); return node; };
 
   // =============== LINEUP: starting five, bench rotation, tactics; drag & drop / tap to swap ===============
@@ -149,33 +151,29 @@ export default function createScreens(ctx) {
       return h("div", { class: "bb-cmp" }, c.rows.map((r) => h("div", { class: "r" }, h("b", {}, r.a), h("div", { class: "bar l" }, h("i", { style: `width:${Math.min(100, r.a)}%` })), h("span", { class: "lab" }, r.label), h("div", { class: "bar rr" }, h("i", { style: `width:${Math.min(100, r.b)}%` })), h("b", {}, r.b))),
         h("p", { class: "muted small center" }, `Chemistry bonus: +${(c.chem[0] * 0.3).toFixed(1)}% / +${(c.chem[1] * 0.3).toFixed(1)}%. This is only a preview: the game is decided by the simulation.`));
     }
-    // the live view: scoreboard, quarter table, play-by-play, leaders; after the final buzzer the full box score
+    // the live view: the cinematic viewer (choreography drawn on a canvas, play-by-play, quarter table, leaders); after the final buzzer the full team stats and box scores
     function createLive(f) {
-      const score = h("div", { class: "bb-score" }), clock = h("div", { class: "bb-clock" }), qt = h("div", { class: "bb-scroll" }), feed = h("div", { class: "bb-log" }), lead = h("div", { class: "bb-lead" }), after = h("div", {}), skipBtn = h("button", { class: "btn small", type: "button", onclick: () => { skipped[f.id] = true; if (f.a === S.key || f.b === S.key) N.patch(S.code, "", { [`lineups/${S.key}/skip`]: f.id }).catch(() => {}); paint(N.now()); } }, "Skip to the final buzzer");
-      const el = h("div", {}, score, clock, qt, h("div", { class: "row between" }, h("h4", {}, "Play-by-play"), skipBtn), feed, lead, after);
-      let shown = -1, doneKey = "";
+      const after = h("div", {}), M = filmFor(f);
+      const viewer = createViewer({ h, N, ent, onSkip: (token) => { skipped[f.id] = true; if (f.a === S.key || f.b === S.key) N.patch(S.code, "", { [`lineups/${S.key}/skip`]: token }).catch(() => {}); } });
+      viewer.load(M, f.startAt, `${f.id}:${f.seed}`); if (skipped[f.id]) viewer.skip(); viewer.start();
+      const el = h("div", {}, viewer.el, after);
+      let doneKey = "";
       function paint(now) {
-        const r = skipped[f.id] ? 1e12 : now - f.startAt, fr = P.frameAt(plan.sim, f.speed, r);
-        rc(score, h("div", { class: "tn" }, names[0]), h("div", { class: "big" }, `${fr.score[0]} - ${fr.score[1]}`), h("div", { class: "tn" }, names[1]));
-        clock.textContent = fr.over ? (plan.sim.ot ? `Final (${plan.sim.ot > 1 ? plan.sim.ot + "OT" : "OT"})` : "Final") : `${P.periodLabel(fr.q)} · ${P.fmtClock(fr.left)}`;
-        skipBtn.hidden = fr.over || plan.durMs === 0;
-        if (shown !== fr.events.length) {
-          shown = fr.events.length;
-          const qs = quarterTable(fr.events, fr.score), hdr = qs.map((x) => (x.q <= 4 ? "Q" + x.q : x.q === 5 ? "OT" : x.q - 4 + "OT"));
-          rc(qt, h("table", { class: "bb-qs" }, h("tr", {}, h("th", {}, ""), ...hdr.map((x) => h("th", {}, x)), h("th", {}, "T")), h("tr", {}, h("td", {}, names[0]), ...qs.map((x) => h("td", {}, x.a)), h("td", {}, fr.score[0])), h("tr", {}, h("td", {}, names[1]), ...qs.map((x) => h("td", {}, x.b)), h("td", {}, fr.score[1]))));
-          const lines = []; for (let i = fr.events.length - 1; i >= 0 && lines.length < 16; i--) { const e = fr.events[i], t = P.lineOf(e, names); if (!t) continue; lines.push(h("div", { class: e.e === "shot" && e.made ? (e.kind === "thr" ? "three" : "made") : e.e === "sub" || e.e === "timeout" ? "sub" : e.e === "period" || e.e === "qend" || e.e === "start" || e.e === "end" || e.e === "overtime" ? "mark" : "" }, t)); }
-          rc(feed, ...lines);
-          const ld = leaders(fr.events); rc(lead, ...ld.map((x, s) => h("div", {}, h("b", {}, names[s]), h("div", {}, x ? `${x.n}: ${x.pts} pts, ${x.reb} reb, ${x.ast} ast` : "—"))));
-        }
-        if (fr.over && doneKey !== f.id) { doneKey = f.id; rc(after, h("h4", {}, "Team stats"), statsTable(plan.sim, names), boxTable(plan.sim, 0, names[0]), boxTable(plan.sim, 1, names[1])); }
+        if (!viewer.running) viewer.paint(now);   // no animation frames (reduced motion, tests): the screen's own tick drives the viewer
+        if (viewer.over && doneKey !== f.id) { doneKey = f.id; rc(after, h("h4", {}, "Team stats"), statsTable(plan.sim, names), boxTable(plan.sim, 0, names[0]), boxTable(plan.sim, 1, names[1])); }
       }
-      return { el, paint };
+      return { el, paint, destroy: () => viewer.destroy() };
     }
+    // the film of a game: built once from the same simulation every device runs (a few hundred ms), in the pre-game window or on first need
+    const films = {};
+    const filmFor = (f) => (films[f.id] ||= (() => { const p = planFor(S.tour, f); return C.buildMatch({ teams: p.teams, sim: p.sim, seed: f.seed | 0, speed: f.speed }); })());
     const liveText = (f, now) => {
-      const p = planFor(S.tour, f), r = now - f.startAt;
+      const r = now - f.startAt;
       if (r < 0) return [`${nameOf(f.a)} v ${nameOf(f.b)}`, `tip-off in ${secs(-r)}s`];
-      const fr = P.frameAt(p.sim, f.speed, skipped[f.id] ? 1e12 : r);
-      return [`${nameOf(f.a)} ${fr.score[0]} - ${fr.score[1]} ${nameOf(f.b)}`, fr.over ? "final" : `${P.periodLabel(fr.q)} ${P.fmtClock(fr.left)}`];
+      const M = filmFor(f);
+      if (!M.animated) return [`${nameOf(f.a)} ${M.finalScore[0]} - ${M.finalScore[1]} ${nameOf(f.b)}`, "final"];
+      const rr = skipped[f.id] ? M.endAnim : Math.min(r, M.endAnim), sc = rr >= M.total ? M.finalScore : C.scoreAt(M, rr), ck = C.clockAt(M, rr);
+      return [`${nameOf(f.a)} ${sc[0]} - ${sc[1]} ${nameOf(f.b)}`, rr >= M.total ? "final" : `${P.periodLabel(ck.q)} ${P.fmtClock(ck.clk)}`];
     };
     function ticker(fights) {   // the games of this round: live score, tap to watch another one
       const key = fights.map((f) => f.id).join() + "|" + watchId + "|" + curId;
@@ -187,12 +185,12 @@ export default function createScreens(ctx) {
         return h("div", { class: "row between" + (f.id === curId ? " me" : "") }, h("span", {}, h("b", {}, f.label), " ", sc), h("span", {}, st, f.id === curId ? null : h("button", { class: "btn small", type: "button", onclick: () => { watchId = f.id; api.update(); } }, "Watch")));
       }));
     }
-    function setup(T, f) { curId = f.id; cmpDone = ""; plan = planFor(T, f); names = [nameOf(f.a), nameOf(f.b)]; live = createLive(f); }
+    function setup(T, f) { if (live && live.destroy) live.destroy(); curId = f.id; cmpDone = ""; plan = planFor(T, f); names = [nameOf(f.a), nameOf(f.b)]; live = createLive(f); }
     function between(T) {
       const fin = T.state === "finishing" || T.state === "done";
       rc(stage, h("h3", {}, fin ? "Tournament complete" : "Next game soon…"), bracketEl(T, S.key));
       if (isHost() && T.state === "awaitNext") stage.append(h("button", { class: "btn primary", onclick: () => { const r = ctx.runner(); if (r && r.nextFight) r.nextFight(); } }, "Start next game now"));
-      curId = ""; plan = null; live = null; side.hidden = true; tickKey = "";
+      if (live && live.destroy) live.destroy(); curId = ""; plan = null; live = null; side.hidden = true; tickKey = "";
     }
     const api = {
       update() {
@@ -220,7 +218,7 @@ export default function createScreens(ctx) {
         else if (live) live.paint(now);
         for (const id of Object.keys(tickRows)) { const fx = (T.fights || {})[id]; if (!fx) continue; const [a, b] = liveText(fx, now); tickRows[id].sc.textContent = a; tickRows[id].st.textContent = b; }
       },
-      destroy() { live = null; }
+      destroy() { if (live && live.destroy) live.destroy(); live = null; }
     };
     return api;
   }
