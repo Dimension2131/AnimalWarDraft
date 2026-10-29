@@ -231,6 +231,7 @@ export function createViewer({ h, N, ent, onSkip }) {
     const by = bp[1] - lift;
     g.beginPath(); g.arc(bp[0], by, br, 0, Math.PI * 2); g.fillStyle = "#f2762a"; g.fill(); g.lineWidth = 1.4; g.strokeStyle = "#2b1405"; g.stroke();
     if (!state.light) { g.beginPath(); g.moveTo(bp[0] - br, by); g.lineTo(bp[0] + br, by); g.moveTo(bp[0], by - br); g.lineTo(bp[0], by + br); g.lineWidth = 1; g.stroke(); }
+    if (fr.cut > 0.02) { g.fillStyle = `rgba(0,0,0,${(fr.cut * 0.85).toFixed(2)})`; g.fillRect(0, 0, W, H); }   // a filler possession starts: a quick fade covers the jump to its clip
   }
 
   // ----- sound cues for the moments that just passed (only while following the live clock) -----

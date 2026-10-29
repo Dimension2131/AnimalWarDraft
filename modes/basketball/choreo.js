@@ -21,10 +21,10 @@ export const SPOTS = { strict: [[50, 83], [83, 62], [17, 62], [69, 36], [38, 20]
 // How each speed is filmed. feat = share of possessions shown at the "key" pace; ks / fs = first guess of the key / fixed scale; dead = how short dead-ball moments are made (they are played faster);
 // say* = how many of the commentary lines of quiet play are kept. The quiet scale is solved so the film ends exactly on the target.
 export const PRESETS = {
-  quick: { feat: 0.07, ks: 0.34, fs: 0.07, dead: 0.4, qmin: 0.035, sayPass: 0, sayOut: 0.45, sayMiss: 0.2, colour: 0.04 },
-  full: { feat: 0.2, ks: 0.6, fs: 0.2, dead: 0.6, qmin: 0.07, sayPass: 0.15, sayOut: 0.85, sayMiss: 0.5, colour: 0.12 },
-  detailed: { feat: 0.3, ks: 0.7, fs: 0.5, dead: 0.8, qmin: 0.12, sayPass: 0.35, sayOut: 0.95, sayMiss: 0.8, colour: 0.18 },
-  broadcast: { feat: 1, ks: 0.7, fs: 1, dead: 1, qmin: 0.3, sayPass: 0.55, sayOut: 1, sayMiss: 1, colour: 0.25 }
+  quick: { clip: 1200, feat: 0.07, ks: 0.34, fs: 0.07, dead: 0.4, qmin: 0.035, sayPass: 0, sayOut: 0.45, sayMiss: 0.2, colour: 0.04 },
+  full: { clip: 1600, feat: 0.2, ks: 0.6, fs: 0.2, dead: 0.6, qmin: 0.07, sayPass: 0.15, sayOut: 0.85, sayMiss: 0.5, colour: 0.12 },
+  detailed: { clip: 1800, feat: 0.1, ks: 1, fs: 0.7, dead: 0.8, qmin: 0.5, sayPass: 0.35, sayOut: 0.95, sayMiss: 0.8, colour: 0.18 },
+  broadcast: { clip: 0, feat: 1, ks: 0.7, fs: 1, dead: 1, qmin: 0.3, sayPass: 0.55, sayOut: 1, sayMiss: 1, colour: 0.25 }
 };
 const DT = 100;        // ms of natural time per sample
 const SPD = 1.3;       // broadcast tempo: the physics runs 1.3x faster than real life, so a possession takes ~9 s of film instead of ~14
@@ -721,8 +721,10 @@ export function buildMatch({ teams, sim, seed, speed }) {
   const featured = new Set(playIdx.slice().sort((a, b) => items[b].interest - items[a].interest || a - b).slice(0, nFeat));
 
   const G = generate(), segs = G.segs;
+  // A filler possession is not sped up into a blur: only its last part (the clip) is shown, at natural speed, behind a short fade; what comes before it is skipped. The events are never skipped (marks keep their place).
+  segs.forEach((g) => { g.skip = 0; if (g.cls === "quiet" && P.clip && g.nat > P.clip + 900) { const minMark = g.marks.length ? Math.min(...g.marks.map((m) => m.t)) : g.nat; g.skip = Math.max(0, Math.min(g.nat - P.clip, minMark - 500)); } g.shown = g.nat - g.skip; });
   // ---- scales: the quiet scale is solved so the whole film lands exactly on the preset duration ----
-  const sums = { fixed: 0, key: 0, quiet: 0 }; segs.forEach((g) => { sums[g.cls] += g.nat * g.w; });
+  const sums = { fixed: 0, key: 0, quiet: 0 }; segs.forEach((g) => { sums[g.cls] += g.shown * g.w; });
   const solve = () => {
     let fs = P.fs, ks = P.ks, q = 1;
     if (sums.quiet > 0) {
@@ -736,11 +738,11 @@ export function buildMatch({ teams, sim, seed, speed }) {
   const sc = solve();
   let r = 0, u = 0; const legs = [];
   segs.forEach((g) => {
-    g.r0 = r; g.u0 = u; g.real = g.nat * g.w * (g.cls === "fixed" ? sc.fs : g.cls === "key" ? sc.ks : sc.q); if (g.w !== 1) g.real = g.nat * (g.cls === "fixed" ? sc.fs : g.cls === "key" ? sc.ks : sc.q) * g.w;
+    g.r0 = r; g.u0 = u; g.real = g.shown * (g.cls === "fixed" ? sc.fs : g.cls === "key" ? sc.ks : sc.q) * g.w; g.ua = g.u0 + g.skip;
     g.r1 = r + g.real; g.u1 = u + g.nat; g.l0 = legs.length; g.legs.forEach((L) => legs.push({ ...L, b: undefined, u0: g.u0 + L.t0, u1: g.u0 + L.t1, seg: g.id })); g.l1 = legs.length; r = g.r1; u = g.u1;
   });
   const total = TARGET; if (segs.length) segs[segs.length - 1].r1 = total;
-  const rOf = (g, t) => g.r0 + (g.r1 - g.r0) * clamp(t / g.nat, 0, 1);
+  const rOf = (g, t) => g.r0 + (g.r1 - g.r0) * clamp((t - g.skip) / g.shown, 0, 1);
 
   // ---- moments (the outcome events at their real times), commentary, clock anchors, cards ----
   const moments = [], lines = [], anchors = [], cards = [];
@@ -781,7 +783,7 @@ export const heatAt = (M, r) => { const k = bsearch(M.moments, "r", r); return k
 
 // Everything the renderer needs at real time rr (ms since tip-off): the clock, the score, the ball and the ten players. Pure and cheap.
 export function frameAt(M, rr) {
-  const r = clamp(rr, 0, M.endAnim), si = segAt(M, r), g = M.segs[si], f = g.r1 > g.r0 ? (r - g.r0) / (g.r1 - g.r0) : 1, u = g.u0 + f * (g.u1 - g.u0);
+  const r = clamp(rr, 0, M.endAnim), si = segAt(M, r), g = M.segs[si], f = g.r1 > g.r0 ? (r - g.r0) / (g.r1 - g.r0) : 1, u = g.ua + f * (g.u1 - g.ua);
   let li = g.l0; while (li < g.l1 - 1 && M.legs[li].u1 <= u) li++;
   const L = M.legs[li], T = M.trk, kf = u / T.dt, k0 = clamp(Math.floor(kf), 0, T.n - 1), k1 = Math.min(k0 + 1, T.n - 1), al = T.CUT[k1] ? 0 : clamp(kf - k0, 0, 1);
   const bx = lerp(T.BS[k0 * 3], T.BS[k1 * 3], al), by = lerp(T.BS[k0 * 3 + 1], T.BS[k1 * 3 + 1], al), bz = lerp(T.BS[k0 * 3 + 2], T.BS[k1 * 3 + 2], al), code = T.HS[al < 0.5 ? k0 : k1];
@@ -792,5 +794,5 @@ export function frameAt(M, rr) {
     players.push({ s, i, id, num: M.num[id] || 0, on: true, x: lerp(T.PS[k0 * 20 + q], T.PS[k1 * 20 + q], al), y: lerp(T.PS[k0 * 20 + q + 1], T.PS[k1 * 20 + q + 1], al), hold: code === s * 5 + i });
   }
   const ck = clockAt(M, r);
-  return { r, seg: g, segIndex: si, gt: ck.gt, q: ck.q, clk: ck.clk, sc: ck.sc, score: scoreAt(M, r), ball: { x: bx, y: by, z: bz }, players, holder: code >= 0 ? { s: Math.floor(code / 5), i: code % 5 } : null, leg: L, f, over: rr >= M.endAnim, half: g.half, heat: heatAt(M, r), card: cardAt(M, r) };
+  return { r, seg: g, segIndex: si, gt: ck.gt, q: ck.q, clk: ck.clk, sc: ck.sc, score: scoreAt(M, r), ball: { x: bx, y: by, z: bz }, players, holder: code >= 0 ? { s: Math.floor(code / 5), i: code % 5 } : null, leg: L, f, over: rr >= M.endAnim, half: g.half, heat: heatAt(M, r), card: cardAt(M, r), cut: g.skip > 0 ? clamp(1 - (r - g.r0) / Math.max(1, Math.min(450, (g.r1 - g.r0) * 0.5)), 0, 1) : 0 };
 }
