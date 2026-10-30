@@ -18,11 +18,11 @@
 #musicPanel .mc-list { flex: 1 1 auto; min-height: 0 }
 .mc-head { display: flex; align-items: center; gap: 6px; padding: 8px 8px 6px 12px }
 .mc-head h2 { flex: 1; margin: 0; font: 1rem var(--display); letter-spacing: .08em; text-transform: uppercase }
-.mc-top { display: grid; gap: 10px; padding: 6px 12px 12px; border-bottom: 2px solid var(--rule) }
-.mc-row { display: flex; align-items: center; gap: 10px; min-height: 32px }
-.mc-lbl { flex: none; width: 64px; font-weight: 800; color: var(--muted); font-size: .8rem; letter-spacing: .06em; text-transform: uppercase }
-.mc-swstate { font-weight: 800 }
-.mc-note { margin: -4px 0 0; color: var(--muted); font-size: .8rem }
+.mc-top { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 6px 12px 12px; border-bottom: 2px solid var(--rule) }
+.mc-row { display: flex; align-items: center; gap: 10px; min-height: 32px; min-width: 0 }
+.mc-lbl { flex: none; width: 96px; white-space: nowrap; font-weight: 800; color: var(--muted); font-size: .8rem; letter-spacing: .06em; text-transform: uppercase }
+.mc-swstate { font-weight: 800; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.mc-note { margin: -4px 0 0; color: var(--muted); font-size: .78rem; line-height: 1.3; overflow-wrap: anywhere }
 
 /* on/off switch (ON = sound on) */
 .mc-switch { position: relative; flex: none; width: 56px; height: 30px; padding: 0; cursor: pointer; border: 2px solid var(--edge-dim); border-radius: 999px; background: var(--field); transition: background .15s, border-color .15s }
@@ -31,10 +31,19 @@
 .mc-switch[aria-checked="true"] .mc-knob { transform: translateX(26px); background: var(--dark) }
 .mc-switch:focus-visible, .mc-ico:focus-visible, .mc-chip:focus-visible, .mc-song:focus-visible { outline: 3px solid var(--teal); outline-offset: 2px }
 
-/* volume: the project's global input{...} rules (width:100%, min-height, padding, border, focus shadow) are reset here, scoped by id so they win */
-#musicPanel .mc-vol { flex: 1; width: auto; min-width: 0; min-height: 0; height: 28px; margin: 0; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; transition: none; accent-color: var(--teal); cursor: pointer }
+/* volume: a pixel "power bar" in the game's own style: 20 blocks that fill with the accent colour, a chunky block handle with the same hard offset shadow as the cards.
+   --p (0..1) is set by js/music-centre.js. The project's global input{...} rules (width:100%, min-height, padding, border, focus shadow) are reset here, scoped by id so they win. */
+#musicPanel .mc-vol { --p: .4; --bar-r: min(var(--w-radius, 6px), 6px); flex: 1; width: auto; min-width: 0; min-height: 0; height: 30px; margin: 0; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; transition: none; cursor: pointer; -webkit-appearance: none; appearance: none }
 #musicPanel .mc-vol:hover, #musicPanel .mc-vol:focus { border: 0; box-shadow: none; outline: none }
 #musicPanel .mc-vol:focus-visible { outline: 3px solid var(--teal); outline-offset: 2px }
+#musicPanel .mc-vol::-webkit-slider-runnable-track { box-sizing: border-box; height: 18px; border: 2px solid var(--edge-dim); border-radius: var(--bar-r);
+  background: linear-gradient(90deg, transparent calc(100% - 2px), var(--sheet) 0) 0 0 / 5% 100% repeat-x, linear-gradient(90deg, var(--teal) calc(6px + (100% - 12px) * var(--p)), var(--field) 0); background-clip: padding-box }
+#musicPanel .mc-vol::-moz-range-track { box-sizing: border-box; height: 18px; border: 2px solid var(--edge-dim); border-radius: var(--bar-r);
+  background: linear-gradient(90deg, transparent calc(100% - 2px), var(--sheet) 0) 0 0 / 5% 100% repeat-x, linear-gradient(90deg, var(--teal) calc(6px + (100% - 12px) * var(--p)), var(--field) 0); background-clip: padding-box }
+#musicPanel .mc-vol::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; box-sizing: border-box; width: 12px; height: 26px; margin-top: -6px; background: var(--yellow); border: 2px solid var(--dark); border-radius: 2px; box-shadow: 2px 2px 0 var(--pink); cursor: pointer }
+#musicPanel .mc-vol::-moz-range-thumb { box-sizing: border-box; width: 12px; height: 26px; background: var(--yellow); border: 2px solid var(--dark); border-radius: 2px; box-shadow: 2px 2px 0 var(--pink); cursor: pointer }
+#musicPanel .mc-vol:active::-webkit-slider-thumb { transform: translate(1px, 1px); box-shadow: 1px 1px 0 var(--pink) }
+#musicPanel .mc-vol:active::-moz-range-thumb { transform: translate(1px, 1px); box-shadow: 1px 1px 0 var(--pink) }
 #musicPanel .mc-vol:disabled { cursor: not-allowed; opacity: .5 }
 .mc-volout { flex: none; width: 3.2em; text-align: right; font-weight: 800; font-variant-numeric: tabular-nums }
 

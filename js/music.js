@@ -4,31 +4,40 @@
 //    If the manifest is missing or empty, folder listings are tried as a fallback (works on `python -m http.server`, `npx serve` ...).
 //  - Random playback: a random track when music starts, another random one (never the same twice in a row) when a track ends or fails.
 //  - Preferences (mute + volume) are kept in localStorage under "adw_music", like the project's other adw_* keys.
-export const CATEGORIES = ["football", "animals", "quiz", "race", "basketball", "pokemon"];   // keep in sync with tools/build-music-manifest.mjs
+export const CATEGORIES = ["football", "animals", "quiz", "race", "basketball"];   // keep in sync with tools/build-music-manifest.mjs
 export const TYPES = { mp3: "audio/mpeg", ogg: "audio/ogg", oga: "audio/ogg", opus: "audio/ogg; codecs=opus", wav: "audio/wav", m4a: "audio/mp4", aac: "audio/aac", flac: "audio/flac", weba: "audio/webm", webm: "audio/webm" };
-const KEY = "adw_music", DUCK = 0.35, clamp = (n, a, b) => Math.min(b, Math.max(a, n));
+const KEY = "adw_music", DUCK = 0.35, FADE_OUT = 700, FADE_IN = 900, clamp = (n, a, b) => Math.min(b, Math.max(a, n));
 
 const extOf = (f) => { const m = /\.([a-z0-9]+)$/i.exec(f); return m ? m[1].toLowerCase() : ""; };
 export const isAudioFile = (f) => typeof f === "string" && !!TYPES[extOf(f)];
 // "Football Background Music 1.mp3" -> "Football Background Music 1" (only a real, supported audio extension is removed; the file name and URL are untouched)
 export const cleanName = (f) => (isAudioFile(f) ? f.replace(/\.[a-z0-9]+$/i, "") : String(f)).trim();
 
-export function createMusicEngine({ audio, base, fetchFn, storage, rand = Math.random, speech = null, timers = { set: (f, ms) => setInterval(f, ms), clear: (id) => clearInterval(id) } }) {
+export function createMusicEngine({ audio, base, fetchFn, storage, rand = Math.random, speech = null, timers = { set: (f, ms) => setInterval(f, ms), clear: (id) => clearInterval(id) }, now = () => Date.now() }) {
   const S = {
     tracks: [], cur: null, status: "idle", notice: "", loaded: false, muted: false, volume: 40, volumeLocked: false, ducked: false,
-    userPaused: false, pausedBySynth: false, needGesture: false, started: false, starting: false, gen: 0, failed: new Set(), lastLoad: 0, loading: null
+    userPaused: false, pausedBySynth: false, needGesture: false, modeMusic: false, modeCat: null, fadeMul: 1, fadeTok: 0, rampUp: false, started: false, starting: false, gen: 0, failed: new Set(), lastLoad: 0, loading: null
   };
   const subs = new Set();
-  let duckTimer = 0, dead = false;
-  const snap = () => ({ tracks: S.tracks, cur: S.cur, status: S.status, notice: S.notice, loaded: S.loaded, muted: S.muted, volume: S.volume, volumeLocked: S.volumeLocked, isPlaying: !!S.cur && !audio.paused, userPaused: S.userPaused, failed: S.failed });
+  let duckTimer = 0, rampTimer = 0, dead = false;
+  const snap = () => ({ tracks: S.tracks, cur: S.cur, status: S.status, notice: S.notice, loaded: S.loaded, muted: S.muted, volume: S.volume, modeMusic: S.modeMusic, volumeLocked: S.volumeLocked, isPlaying: !!S.cur && !audio.paused, userPaused: S.userPaused, failed: S.failed });
   const emit = () => { const s = snap(); for (const f of subs) { try { f(s); } catch (e) { /* a broken subscriber must not stop playback */ } } };
-  const save = () => { try { storage && storage.setItem(KEY, JSON.stringify({ muted: S.muted, volume: S.volume })); } catch (e) { /* private mode */ } };
-  try { const p = JSON.parse((storage && storage.getItem(KEY)) || "null"); if (p) { S.muted = p.muted === true; if (Number.isFinite(p.volume)) S.volume = clamp(Math.round(p.volume), 0, 100); } } catch (e) { /* ignore */ }
+  const save = () => { try { storage && storage.setItem(KEY, JSON.stringify({ muted: S.muted, volume: S.volume, modeMusic: S.modeMusic })); } catch (e) { /* private mode */ } };
+  try { const p = JSON.parse((storage && storage.getItem(KEY)) || "null"); if (p) { S.muted = p.muted === true; S.modeMusic = p.modeMusic === true; if (Number.isFinite(p.volume)) S.volume = clamp(Math.round(p.volume), 0, 100); } } catch (e) { /* ignore */ }
 
   // iOS Safari ignores audio.volume (the device buttons rule): detect it once so the UI can say so instead of showing a dead slider.
   try { audio.volume = 0.5; S.volumeLocked = Math.abs(audio.volume - 0.5) > 0.01; } catch (e) { S.volumeLocked = true; }
   audio.preload = "auto"; audio.muted = S.muted;
-  const applyVolume = () => { try { audio.volume = clamp((S.volume / 100) * (S.ducked ? DUCK : 1), 0, 1); } catch (e) { /* ignore */ } };
+  const applyVolume = () => { try { audio.volume = clamp((S.volume / 100) * (S.ducked ? DUCK : 1) * S.fadeMul, 0, 1); } catch (e) { /* ignore */ } };
+  // Linear fade of a 0..1 multiplier that sits on top of the user's volume. With a locked volume (iOS) there is nothing to ramp, so it just jumps.
+  const stopRamp = () => { if (rampTimer) { timers.clear(rampTimer); rampTimer = 0; } };
+  function ramp(to, ms, done) {
+    stopRamp();
+    if (S.volumeLocked || ms <= 0) { S.fadeMul = to; applyVolume(); if (done) done(); return; }
+    const from = S.fadeMul, t0 = now();
+    rampTimer = timers.set(() => { const k = clamp((now() - t0) / ms, 0, 1); S.fadeMul = from + (to - from) * k; applyVolume(); if (k >= 1) { stopRamp(); if (done) done(); } }, 40);
+  }
+  const cancelFade = () => { S.fadeTok++; stopRamp(); S.rampUp = false; if (S.fadeMul !== 1) { S.fadeMul = 1; applyVolume(); } };   // any deliberate action cancels a pending mode switch
   applyVolume();
 
   // ---------- library ----------
@@ -68,16 +77,17 @@ export function createMusicEngine({ audio, base, fetchFn, storage, rand = Math.r
   }
 
   // ---------- playback ----------
-  const pick = (excludeId) => {
-    const pool = S.tracks.filter((t) => !S.failed.has(t.id));
+  const pick = (excludeId, cat = null) => {
+    const pool = S.tracks.filter((t) => !S.failed.has(t.id) && (!cat || t.cat === cat));
     const others = pool.filter((t) => t.id !== excludeId);
     const from = others.length ? others : pool;   // a one-track library just repeats that track
     return from.length ? from[Math.floor(rand() * from.length) % from.length] : null;
   };
   const unmute = () => { if (S.muted) { S.muted = false; audio.muted = false; save(); } };
-  function play(t, { manual = false } = {}) {
+  function play(t, { manual = false, fade = false } = {}) {
     if (!t || dead) return;
     const gen = ++S.gen;
+    if (fade) { S.fadeMul = 0; S.rampUp = true; } else { cancelFade(); }   // a fade-in starts once the song really plays (see onPlaying)
     if (manual) { S.failed.delete(t.id); S.userPaused = false; unmute(); }   // an explicit choice means "I want to hear it"
     S.pausedBySynth = false; S.cur = t; S.started = true; S.status = "loading"; S.notice = "";
     audio.src = t.url;   // replaces (and aborts) whatever was loaded: there is only ever one stream
@@ -92,13 +102,13 @@ export function createMusicEngine({ audio, base, fetchFn, storage, rand = Math.r
       if (gen !== S.gen) return;   // a newer track took over: this rejection is stale
       const n = err && err.name;
       if (n === "AbortError") return;
-      if (n === "NotAllowedError") { S.needGesture = true; S.status = "blocked"; emit(); return; }   // autoplay policy: wait for a real gesture, do not retry in a loop
+      if (n === "NotAllowedError") { S.needGesture = true; S.status = "blocked"; cancelFade(); emit(); return; }   // autoplay policy: wait for a real gesture, do not retry in a loop
       failed(t, gen);
     }).then(() => { S.starting = false; });
   }
   function failed(t, gen) {   // the file is missing / corrupt / unsupported: remember it and move on to another track
     if (gen !== S.gen || dead) return;
-    S.failed.add(t.id);
+    S.failed.add(t.id); cancelFade();
     const n = pick(t.id);
     if (n && n.id !== t.id) { play(n); S.notice = "Couldn’t play “" + t.name + "”. Trying another."; emit(); return; }
     S.gen++; try { audio.removeAttribute("src"); audio.load(); } catch (e) { /* ignore */ }
@@ -109,10 +119,10 @@ export function createMusicEngine({ audio, base, fetchFn, storage, rand = Math.r
     if (S.starting) return;
     settle(safePlay(), S.gen, S.cur);
   }
-  function startRandom(opts) { const t = pick(S.cur && S.cur.id); if (t) play(t, opts); else { S.status = S.tracks.length ? "none" : "idle"; emit(); } }
+  function startRandom(opts) { const id = S.cur && S.cur.id, t = (S.modeMusic && S.modeCat && pick(id, S.modeCat)) || pick(id); if (t) play(t, opts); else { S.status = S.tracks.length ? "none" : "idle"; emit(); } }
   function autoStart() { if (!S.started && !S.muted && !S.userPaused && !S.cur && S.tracks.length) startRandom(); }
 
-  const onPlaying = () => { S.status = "playing"; S.needGesture = false; S.notice = ""; emit(); watchSpeech(true); };
+  const onPlaying = () => { S.status = "playing"; S.needGesture = false; S.notice = ""; if (S.rampUp) { S.rampUp = false; ramp(1, FADE_IN); } emit(); watchSpeech(true); };
   const onPause = () => { if (S.status === "playing") S.status = "paused"; emit(); watchSpeech(false); };
   const onEnded = () => { watchSpeech(false); const n = pick(S.cur && S.cur.id); if (n) play(n); else { S.status = "none"; emit(); } };   // random continuation, also after a manual pick
   const onError = () => { if (S.cur && audio.getAttribute("src")) failed(S.cur, S.gen); };
@@ -131,10 +141,23 @@ export function createMusicEngine({ audio, base, fetchFn, storage, rand = Math.r
     loadLibrary, refresh: () => loadLibrary(true), get lastLoad() { return S.lastLoad; },
     select(id) { const t = S.tracks.find((x) => x.id === id); if (t) play(t, { manual: true }); },
     next() { const t = pick(S.cur && S.cur.id); if (t) play(t, { manual: true }); },
+    random(cat) { const t = pick(S.cur && S.cur.id, cat || null); if (t) play(t, { manual: true }); },   // random song, optionally only from one category
+    setModeMusic(on) { S.modeMusic = !!on; save(); emit(); },
+    // The player switched game (Animals / Football / Basketball ...). cat = that game's music folder, or null if it has none.
+    // With "mode music" on, the current song fades out and a random song of that folder fades in. Only at this moment: afterwards the player is free to pick anything.
+    setModeCat(cat, { change = false } = {}) {
+      S.modeCat = cat || null;
+      if (!change || !S.modeMusic || !cat || S.muted || S.userPaused || S.pausedBySynth || dead) return;
+      if (S.cur && S.cur.cat === cat && S.status !== "none") return;   // already playing that game's music
+      const t = pick(S.cur && S.cur.id, cat); if (!t) return;
+      const tok = ++S.fadeTok; stopRamp(); S.rampUp = false;
+      const go = () => { if (tok === S.fadeTok && !dead) play(t, { fade: true }); };
+      if (S.cur && !audio.paused) ramp(0, FADE_OUT, go); else go();
+    },
     toggle() {
       if (!S.cur || S.status === "none") { startRandom({ manual: true }); return; }
       if (audio.paused) { S.userPaused = false; S.pausedBySynth = false; unmute(); resume(); emit(); }
-      else { S.userPaused = true; audio.pause(); S.status = "paused"; emit(); }
+      else { cancelFade(); S.userPaused = true; audio.pause(); S.status = "paused"; emit(); }
     },
     setMuted(m) {
       S.muted = !!m; audio.muted = S.muted; save();
@@ -150,6 +173,6 @@ export function createMusicEngine({ audio, base, fetchFn, storage, rand = Math.r
       if (on) { if (S.cur && !audio.paused) { S.pausedBySynth = true; audio.pause(); S.status = "synth"; emit(); } }
       else if (S.pausedBySynth) { S.pausedBySynth = false; if (!S.userPaused && !S.muted) resume(); else { S.status = "paused"; emit(); } }
     },
-    destroy() { dead = true; watchSpeech(false); audio.removeEventListener("playing", onPlaying); audio.removeEventListener("pause", onPause); audio.removeEventListener("ended", onEnded); audio.removeEventListener("error", onError); try { audio.pause(); } catch (e) { /* ignore */ } subs.clear(); }
+    destroy() { dead = true; stopRamp(); watchSpeech(false); audio.removeEventListener("playing", onPlaying); audio.removeEventListener("pause", onPause); audio.removeEventListener("ended", onEnded); audio.removeEventListener("error", onError); try { audio.pause(); } catch (e) { /* ignore */ } subs.clear(); }
   };
 }

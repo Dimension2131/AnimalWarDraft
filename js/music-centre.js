@@ -10,6 +10,7 @@ const ICON = {
   pause: "<svg viewBox='0 0 16 16' aria-hidden='true' focusable='false'><path d='M3.5 2.5h3.5v11H3.5zM9 2.5h3.5v11H9z' fill='currentColor'/></svg>",
   next: "<svg viewBox='0 0 16 16' aria-hidden='true' focusable='false'><path d='M3 2.5v11l7-5.5zM11 2.5h2v11h-2z' fill='currentColor'/></svg>",
   refresh: "<svg viewBox='0 0 16 16' aria-hidden='true' focusable='false'><path d='M13 8a5 5 0 1 1-1.6-3.7M13 2.5v3h-3' fill='none' stroke='currentColor' stroke-width='1.8'/></svg>",
+  shuffle: "<svg viewBox='0 0 16 16' aria-hidden='true' focusable='false'><path d='M1.5 4.5h2.8c3.4 0 4.4 7 7.9 7h1.8M1.5 11.5h2.8c1.1 0 1.9-.6 2.6-1.6M9.2 6.1c.8-1 1.8-1.6 3-1.6h1.8M12.2 2.6l2 1.9-2 1.9M12.2 9.6l2 1.9-2 1.9' fill='none' stroke='currentColor' stroke-width='1.7' stroke-linecap='square'/></svg>",
   close: "<svg viewBox='0 0 16 16' aria-hidden='true' focusable='false'><path d='M3.5 3.5l9 9M12.5 3.5l-9 9' fill='none' stroke='currentColor' stroke-width='1.8'/></svg>"
 };
 function el(tag, attrs, ...kids) {
@@ -18,6 +19,8 @@ function el(tag, attrs, ...kids) {
   for (const c of kids.flat()) if (c != null && c !== false) e.append(c);
   return e;
 }
+// Game tile (data-world on <html>, see js/pack.js) -> music folder. Pokémon has no folder, so switching to it leaves the music alone.
+const WORLD_CAT = { animals: "animals", football: "football", basketball: "basketball" };
 const label = (c) => c.charAt(0).toUpperCase() + c.slice(1);
 
 function init() {
@@ -35,20 +38,25 @@ function init() {
   // ---------- panel ----------
   const sw = el("button", { class: "mc-switch", type: "button", role: "switch", "aria-checked": "true", "aria-labelledby": "mcSwLabel" }, el("span", { class: "mc-knob" }));
   const swState = el("span", { class: "mc-swstate" }, "On");
-  const vol = el("input", { id: "mcVol", class: "mc-vol", type: "range", min: "0", max: "100", step: "1", value: "40" });
+  const modeSw = el("button", { class: "mc-switch", type: "button", role: "switch", "aria-checked": "false", "aria-labelledby": "mcModeLabel", "aria-describedby": "mcModeHint" }, el("span", { class: "mc-knob" }));
+  const modeState = el("span", { class: "mc-swstate" }, "Off");
+  const vol = el("input", { id: "mcVol", class: "mc-vol", type: "range", min: "0", max: "100", step: "5", value: "40" });
   const volOut = el("output", { class: "mc-volout", for: "mcVol" }, "40%");
   const volNote = el("p", { class: "mc-note", hidden: true }, "Volume follows your device’s own volume buttons.");
   const playBtn = el("button", { class: "mc-ico mc-play", type: "button", "aria-label": "Play", title: "Play / pause", html: ICON.play });
   const nextBtn = el("button", { class: "mc-ico", type: "button", "aria-label": "Next random track", title: "Next random track", html: ICON.next });
   const status = el("span", { class: "mc-status" }), name = el("span", { class: "mc-name" }, "—");
+  const randomBtn = el("button", { class: "mc-ico", type: "button", "aria-label": "Random song", title: "Random song", html: ICON.shuffle });
   const refreshBtn = el("button", { class: "mc-ico", type: "button", "aria-label": "Refresh song list", title: "Refresh song list", html: ICON.refresh });
   const closeBtn = el("button", { class: "mc-ico", type: "button", "aria-label": "Close music panel", title: "Close", html: ICON.close });
   const chips = el("div", { class: "mc-filters", role: "group", "aria-label": "Song category" });
   const list = el("div", { class: "mc-list", tabindex: "-1" });
   const panel = el("section", { id: "musicPanel", role: "dialog", "aria-labelledby": "mcTitle", hidden: true },
-    el("div", { class: "mc-head" }, el("h2", { id: "mcTitle" }, "Music"), refreshBtn, closeBtn),
+    el("div", { class: "mc-head" }, el("h2", { id: "mcTitle" }, "Music"), randomBtn, refreshBtn, closeBtn),
     el("div", { class: "mc-top" },
       el("div", { class: "mc-row" }, el("span", { id: "mcSwLabel", class: "mc-lbl" }, "Sound"), sw, swState),
+      el("div", { class: "mc-row" }, el("span", { id: "mcModeLabel", class: "mc-lbl" }, "Mode music"), modeSw, modeState),
+      el("p", { id: "mcModeHint", class: "mc-note" }, "Fades into the game’s own songs when you switch games."),
       el("div", { class: "mc-row" }, el("label", { for: "mcVol", class: "mc-lbl" }, "Volume"), vol, volOut), volNote,
       el("div", { class: "mc-now" }, playBtn, nextBtn, el("div", { class: "mc-track", "aria-live": "polite" }, status, name))),
     chips, list);
@@ -90,6 +98,8 @@ function init() {
 
   // ---------- controls ----------
   sw.addEventListener("click", () => engine.setMuted(sw.getAttribute("aria-checked") === "true"));   // switch is ON = sound on, so a click while ON mutes
+  modeSw.addEventListener("click", () => engine.setModeMusic(modeSw.getAttribute("aria-checked") !== "true"));
+  randomBtn.addEventListener("click", () => engine.random(filter === "all" ? null : filter));   // random song from the category you are looking at (All = everything)
   vol.addEventListener("input", () => engine.setVolume(+vol.value));
   playBtn.addEventListener("click", () => engine.toggle());
   nextBtn.addEventListener("click", () => engine.next());
@@ -149,7 +159,7 @@ function init() {
   chips.addEventListener("click", (e) => {
     const b = e.target.closest(".mc-chip"); if (!b || b.disabled) return;
     filter = b.dataset.cat; for (const c of chips.children) c.setAttribute("aria-pressed", String(c.dataset.cat === filter));
-    list.scrollTop = 0; renderList(last); mark(last);
+    list.scrollTop = 0; renderList(last); render(last);   // render() also refreshes the Random button for the new category
   });
   function mark(s) {
     for (const b of list.querySelectorAll(".mc-song")) {
@@ -162,6 +172,10 @@ function init() {
     last = s;
     sw.setAttribute("aria-checked", String(!s.muted)); swState.textContent = s.muted ? "Muted" : "On";
     if (+vol.value !== s.volume) vol.value = String(s.volume);
+    vol.style.setProperty("--p", String(s.volume / 100));   // drives the filled blocks of the pixel volume bar (styles/music-centre.css)
+    modeSw.setAttribute("aria-checked", String(s.modeMusic)); modeState.textContent = s.modeMusic ? "On" : "Off";
+    const scope = filter === "all" ? s.tracks.length : s.tracks.filter((t) => t.cat === filter).length;
+    randomBtn.disabled = !scope; randomBtn.setAttribute("aria-label", filter === "all" ? "Random song" : "Random " + label(filter) + " song"); randomBtn.title = randomBtn.getAttribute("aria-label");
     vol.setAttribute("aria-valuetext", s.volume + " percent"); volOut.textContent = s.volume + "%"; vol.disabled = s.volumeLocked; volNote.hidden = !s.volumeLocked;
     playBtn.innerHTML = s.isPlaying ? ICON.pause : ICON.play; playBtn.setAttribute("aria-label", s.isPlaying ? "Pause" : "Play"); playBtn.disabled = nextBtn.disabled = !s.tracks.length;
     status.textContent = text(s); name.textContent = s.cur ? s.cur.name : "—"; name.title = s.cur ? s.cur.name : "";
@@ -169,6 +183,10 @@ function init() {
     if (s.tracks !== lastTracks) { lastTracks = s.tracks; if (filter !== "all" && !s.tracks.some((t) => t.cat === filter)) filter = "all"; renderChips(s); renderList(s); }
     mark(s);
   }
+  // Mode music: the Game tiles change data-world on <html>. Watching that attribute needs no hook in the game code.
+  let world = root.dataset.world;
+  engine.setModeCat(WORLD_CAT[world] || null);
+  new MutationObserver(() => { const w = root.dataset.world; if (w === world) return; world = w; engine.setModeCat(WORLD_CAT[w] || null, { change: true }); }).observe(root, { attributes: true, attributeFilter: ["data-world"] });
   engine.on(render);
   engine.loadLibrary(true);   // starts the random music on the first allowed moment, panel open or not
 }
