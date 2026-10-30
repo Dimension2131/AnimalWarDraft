@@ -85,7 +85,8 @@ function init() {
 
   function openPanel() {
     open = true; panel.hidden = false; btn.setAttribute("aria-expanded", "true"); watchBtns(); place();
-    if (Date.now() - engine.lastLoad > 30000) engine.loadLibrary(false);   // pick up songs added since the page loaded
+    if (!engine.state.tracks.length) engine.refresh();   // nothing to show yet: try again right now
+    else if (Date.now() - engine.lastLoad > 30000) engine.loadLibrary(false);   // pick up songs added since the page loaded
     sw.focus({ preventScroll: true });
   }
   function closePanel(returnFocus) { open = false; panel.hidden = true; btn.setAttribute("aria-expanded", "false"); if (returnFocus) btn.focus({ preventScroll: true }); }
@@ -125,10 +126,11 @@ function init() {
   });
 
   // ---------- rendering ----------
-  let filter = "all", lastTracks = null, last = engine.state;
+  let filter = "all", lastTracks = null, lastSig = "", last = engine.state;
+  const emptySig = (s) => (s.tracks.length ? "" : (s.loaded ? "L" : "") + (s.searching ? "S" : ""));   // an empty list's message changes with these
   const text = (s) => {
     if (!s.loaded) return "Looking for music…";
-    if (!s.tracks.length) return "No music found yet";
+    if (!s.tracks.length) return s.searching ? "Looking for music…" : "No music found yet";
     if (s.notice) return s.notice;
     switch (s.status) {
       case "loading": return "Loading…";
@@ -153,7 +155,7 @@ function init() {
       groups.push(el("section", { class: "mc-cat" }, filter === "all" ? el("h3", null, label(c)) : null,
         el("ul", null, items.map((t) => el("li", null, el("button", { class: "mc-song", type: "button", "data-id": t.id, title: t.name }, el("span", { class: "mc-eq", "aria-hidden": "true" }, el("i"), el("i"), el("i")), el("span", { class: "mc-sname" }, t.name)))))));
     }
-    if (!groups.length) groups.push(el("p", { class: "mc-empty" }, !s.loaded ? "Looking for music…" : filter === "all" ? "No music found yet. Add songs to the music folders, then press refresh." : "No songs in this category yet."));
+    if (!groups.length) groups.push(el("p", { class: "mc-empty" }, !s.loaded || s.searching ? "Looking for music…" : filter === "all" ? "No music found yet. Add songs to the music folders, then press refresh." : "No songs in this category yet."));
     list.replaceChildren(...groups); list.scrollTop = keep;
   }
   chips.addEventListener("click", (e) => {
@@ -180,7 +182,7 @@ function init() {
     playBtn.innerHTML = s.isPlaying ? ICON.pause : ICON.play; playBtn.setAttribute("aria-label", s.isPlaying ? "Pause" : "Play"); playBtn.disabled = nextBtn.disabled = !s.tracks.length;
     status.textContent = text(s); name.textContent = s.cur ? s.cur.name : "—"; name.title = s.cur ? s.cur.name : "";
     btn.classList.toggle("is-muted", s.muted); btn.title = s.muted ? "Music (sound off)" : "Music";
-    if (s.tracks !== lastTracks) { lastTracks = s.tracks; if (filter !== "all" && !s.tracks.some((t) => t.cat === filter)) filter = "all"; renderChips(s); renderList(s); }
+    if (s.tracks !== lastTracks || emptySig(s) !== lastSig) { lastTracks = s.tracks; lastSig = emptySig(s); if (filter !== "all" && !s.tracks.some((t) => t.cat === filter)) filter = "all"; renderChips(s); renderList(s); }
     mark(s);
   }
   // Mode music: the Game tiles change data-world on <html>. Watching that attribute needs no hook in the game code.
@@ -189,6 +191,9 @@ function init() {
   new MutationObserver(() => { const w = root.dataset.world; if (w === world) return; world = w; engine.setModeCat(WORLD_CAT[w] || null, { change: true }); }).observe(root, { attributes: true, attributeFilter: ["data-world"] });
   engine.on(render);
   engine.loadLibrary(true);   // starts the random music on the first allowed moment, panel open or not
+  // Back online / tab visible again with no list: read it again (a list that is already there is left alone; the refresh button is for new songs)
+  addEventListener("online", () => { if (!engine.state.tracks.length) engine.refresh(); });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && !engine.state.tracks.length) engine.refresh(); });
 }
 
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init, { once: true }); else init();

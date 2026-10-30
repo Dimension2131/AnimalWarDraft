@@ -304,7 +304,7 @@ async function main() {
     runner: () => runner,
     get pack() { return PK; }, get mode() { return MD; }, get entities() { return ENT; },
     arenaMeta: () => P.arenaMeta(PK),
-    simulate: (A, B, arena, seed) => simulate(A, B, arena, seed, { arenaLabel: P.arenaOf(PK, arena).label })
+    simulate: (A, B, arena, seed, fleeing) => simulate(A, B, arena, seed, { arenaLabel: P.arenaOf(PK, arena).label, fleeing })
   };
 
   screens.loading = () => { screen(h("p", { class: "muted center" }, "Loading room…")); return {}; };

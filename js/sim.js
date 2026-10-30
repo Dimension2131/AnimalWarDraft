@@ -21,6 +21,9 @@ export function hpOf(a) { return R.HP_BASE + a.size * R.HP_SIZE_K + a.stamina * 
 
 export function simulate(teamA, teamB, arena, seed, opts = {}) {
   const rng = mulberry32(seed >>> 0);
+  // Animal Fleeing (room option). opts.fleeing === false: nobody ever flees, every fight runs until one side is down (or the tick cap).
+  // Omitted / true keeps the original rules, so fights saved before the option existed, the fingerprint and the balance test behave exactly as before.
+  const canFlee = opts.fleeing !== false;
   const rr = (a, b) => a + (b - a) * rng();
   const events = [];
   let eid = 0, result = null;
@@ -202,7 +205,7 @@ export function simulate(teamA, teamB, arena, seed, opts = {}) {
   for (let tick = 1; tick <= R.MAX_TICKS && !result; tick++) {
     lastTick = tick;
     refresh(tick);
-    for (const s of ["A", "B"]) {
+    for (const s of canFlee ? ["A", "B"] : []) {   // morale check: skipped entirely when Animal Fleeing is off (no rng drawn)
       if (result) break;
       const lost = T[s].length - active(s).length;
       for (const u of active(s)) {

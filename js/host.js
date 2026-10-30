@@ -53,7 +53,7 @@ export function startHost({ code, key, animals, pack, mode, onLog = () => {} }) 
   const online = () => Object.fromEntries(Object.entries(S.players || {}).map(([k, p]) => [k, !!p.online]));
   const nm = (k) => ((S.players || {})[k] || {}).name || k;
   const an = (id) => (map.get(id) || { name: id }).name;
-  const fightSim = (A, B, arena, seed) => simulate(A, B, arena, seed, { arenaLabel: arenaOf(pack, arena).label });
+  const fightSim = (A, B, arena, seed, fleeing) => simulate(A, B, arena, seed, { arenaLabel: arenaOf(pack, arena).label, fleeing });
   const modeHost = mode.createHost ? mode.createHost({ code, S, settings, nm, an, log, map, pack, simulate: fightSim }) : {};
 
   // startGame(): the lobby's Start button. With { rematch: true } (results screen, "Play again: re-draft") only the players who are still online take part.

@@ -20,7 +20,7 @@ export async function aiJudgeAppeal({ appeal, fight, pack, entityMap }) {
   try {
     const r = await fetch(R.AI_PROXY_URL, { method: "POST", signal: ctl.signal, headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        pack: pack.id, teamA: arr(fight.teamA).map((a) => a.id), teamB: arr(fight.teamB).map((a) => a.id), arena: fight.arena, seed: fight.seed,
+        pack: pack.id, teamA: arr(fight.teamA).map((a) => a.id), teamB: arr(fight.teamB).map((a) => a.id), arena: fight.arena, seed: fight.seed, fleeing: fight.fleeing !== false,
         appellant: fight.final.winner === "A" ? "B" : "A", claimedDigest: fight.result.digest, fingerprint: fingerprint(entityMap, pack),
         appeal: text(appeal.claims), rebuttal: text(appeal.rebuttal)
       }) });
@@ -138,13 +138,13 @@ export function createHost(ctx) {
       const { tour, pick } = advance(c);
       if (!pick) { tour.state = "finishing"; return tour; }
       const m = tour.rounds[pick.ri][pick.mi], id = "f" + (++tour.seq);
-      tour.fights[id] = { id, a: m.a, b: m.b, label: tour.labels[pick.ri] || "Fight", round: pick.ri, arena, seed, startAt, status: "playing",
+      tour.fights[id] = { id, a: m.a, b: m.b, label: tour.labels[pick.ri] || "Fight", round: pick.ri, arena, seed, startAt, status: "playing", fleeing: settings().animalFleeing === true,   // frozen per fight: every device simulates it with the same rule
         teamA: teamOf(tour, m.a), teamB: teamOf(tour, m.b) };
       m.fightId = id; tour.state = "playing"; tour.currentFight = id; return tour;
     });
   }
   const fightDigest = (f) => {
-    if (!sim[f.id]) sim[f.id] = simulate(f.teamA, f.teamB, f.arena, f.seed);
+    if (!sim[f.id]) sim[f.id] = simulate(f.teamA, f.teamB, f.arena, f.seed, f.fleeing);
     return sim[f.id];
   };
   async function playingStep() {
@@ -257,7 +257,7 @@ export function createHost(ctx) {
     await tourTx((c) => {
       if (c.state !== "appeal" || c.currentFight !== fid) return undefined;
       const o = c.fights[fid], id = "f" + (++c.seq);
-      c.fights[id] = { id, a: o.a, b: o.b, label: "Rematch (appeal)", round: o.round, arena: o.arena, seed, startAt, status: "playing", replayOf: fid, teamA: o.teamA, teamB: o.teamB };
+      c.fights[id] = { id, a: o.a, b: o.b, label: "Rematch (appeal)", round: o.round, arena: o.arena, seed, startAt, status: "playing", replayOf: fid, fleeing: o.fleeing, teamA: o.teamA, teamB: o.teamB };
       c.state = "playing"; c.currentFight = id; return c;
     });
     await setAppeal(fid, (c) => ({ ...c, applied: true }));

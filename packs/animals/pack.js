@@ -23,7 +23,7 @@ export default {
     { key: "defense", label: "Defense", abbr: "DEF", description: "Cuts every hit you take by a factor of 100/(100+defense). Defense 100 halves incoming damage; it never makes you immune." },
     { key: "speed", label: "Speed", abbr: "SPD", description: "Decides who acts first each round (plus a little random jitter) and makes you harder to hit: a faster target adds up to +25% miss chance against slower attackers. Limping animals act and dodge at 70% speed." },
     { key: "stamina", label: "Stamina", abbr: "STA", description: "Adds straight to your hit points: HP = 40 + size×0.45 + stamina. More stamina means you survive more hits before you start limping (below 25% HP)." },
-    { key: "instinct", label: "Instinct", abbr: "INS", description: "Instinct does three things. 1) Smarter targeting: a chance to pick the weakest or most dangerous enemy instead of the nearest. 2) Crits: higher instinct lands critical hits more often. 3) Nerve: after your team loses 2 animals, low-instinct animals are much more likely to lose their nerve and flee." },
+    { key: "instinct", label: "Instinct", abbr: "INS", description: "Instinct does three things. 1) Smarter targeting: a chance to pick the weakest or most dangerous enemy instead of the nearest. 2) Crits: higher instinct lands critical hits more often. 3) Nerve: after your team loses 2 animals, low-instinct animals are much more likely to lose their nerve and flee (only when the room has Animal Fleeing turned on)." },
     { key: "size", label: "Size", abbr: "SIZE", description: "Derived from mass on a 1-100 log scale. Adds 0.45 HP per point (HP = 40 + size×0.45 + stamina), and a bigger attacker misses a much smaller target more often (up to +15% miss chance)." }
   ],
 

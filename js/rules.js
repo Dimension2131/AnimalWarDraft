@@ -116,7 +116,7 @@ export const TRAIT_DOWN = {
 const pc = (x) => Math.round(x * 100);
 const TRAIT_TEXT = {
   second_wind:  (d) => `Below ${pc(d.frac)}% HP it hits ${pc(d.mult - 1)}% harder.`,
-  tenacious:    () => "Never loses nerve: ignores morale and never flees.",
+  tenacious:    () => "Never loses nerve: ignores morale and never flees. Only matters when Animal Fleeing is on.",
   camouflage:   (d) => `Hard to spot early: enemies miss it ${pc(d.miss)}% more in the first ${d.ticks} rounds.`,
   intimidating: (d) => `While it stands, every enemy attack misses ${pc(d.miss)}% more.`,
   keen_senses:  (d) => `Spots weak points: +${d.bonus} instinct when picking targets.`,
@@ -129,14 +129,14 @@ const TRAIT_TEXT = {
   giant_slayer: (d) => `Hits ${pc(d.mult - 1)}% harder against enemies ${d.gap}+ size points bigger.`,
   slow_start:   (d) => `Sluggish at first: speed ×${d.mult} for the first ${d.ticks} rounds.`,
   tires_fast:   (d) => `Runs out of steam: damage falls ${pc(d.rate)}% per round after round ${d.after} (max −${pc(d.cap)}%).`,
-  skittish:     () => "Easily spooked: may flee after ONE fallen teammate instead of two.",
+  skittish:     () => "Easily spooked: may flee after ONE fallen teammate instead of two. Only matters when Animal Fleeing is on.",
   brittle:      (d) => `Heavy blows (${pc(d.frac)}%+ of its max HP) hurt it ${pc(d.mult - 1)}% more.`,
   poor_eyesight:(d) => `Its attacks miss ${pc(d.miss)}% more often.`,
   overconfident:() => "Ignores smart targeting: always attacks the nearest enemy.",
   winded:       (d) => `Below ${pc(d.frac)}% HP its damage drops ${pc(1 - d.mult)}%.`,
   conspicuous:  (d) => `Easy to hit: enemies miss it only ${pc(d.missMult)}% as often as normal.`,
   clumsy:       (d) => `Wild swings: damage rolls ${d.min}x-${DMG_MAX}x instead of ${DMG_MIN}x-${DMG_MAX}x.`,
-  faint_hearted:() => "Once limping (below 25% HP) it may flee on any round.",
+  faint_hearted:() => "Once limping (below 25% HP) it may flee on any round. Only matters when Animal Fleeing is on.",
   solitary:     (d) => `Dislikes company: −${pc(1 - d.mult)}% damage while ${d.mates}+ teammates stand with it.`
 };
 for (const [k, d] of Object.entries(TRAIT_UP)) d.desc = TRAIT_TEXT[k](d);

@@ -27,7 +27,7 @@ export default function createScreens(ctx) {
       if (t.currentFight && t.fights[t.currentFight]) return t.fights[t.currentFight];
       const last = t.fights["f" + t.seq]; return last && last.status === "done" ? last : null;
     }
-    function ensureSim(f) { return sims[f.id] || (sims[f.id] = simulate(arr(f.teamA), arr(f.teamB), f.arena, f.seed)); }
+    function ensureSim(f) { return sims[f.id] || (sims[f.id] = simulate(arr(f.teamA), arr(f.teamB), f.arena, f.seed, f.fleeing)); }
     const revealed = (f, sim) => !!f && (skipped[f.id] || f.status === "done" || N.now() >= f.startAt + R.revealDelay(sim.events.length));
     const hl = (id) => { hlId = id; const f = shownFight(); if (!f) return; renderEventLog(logBox, ensureSim(f).events, Math.max(logIdx, id), { onClick: hl, highlightId: id }); const li = logBox.querySelector(`li[data-id="${id}"]`); if (li) li.scrollIntoView({ block: "nearest" }); };
     function drawLog() { const f = shownFight(); if (!f) { logBox.replaceChildren(); return; } renderEventLog(logBox, ensureSim(f).events, logIdx, { onClick: hl, highlightId: hlId }); }
@@ -148,7 +148,7 @@ export default function createScreens(ctx) {
     d.addEventListener("toggle", () => {
       if (!d.open || body.childElementCount) return;
       if (!f.teamA || !f.teamB) { body.append(h("p", { class: "muted small" }, "No log was saved for this fight.")); return; }
-      const sim = resCache[f.id] || (resCache[f.id] = simulate(arr(f.teamA), arr(f.teamB), f.arena, f.seed));
+      const sim = resCache[f.id] || (resCache[f.id] = simulate(arr(f.teamA), arr(f.teamB), f.arena, f.seed, f.fleeing));
       const logBox = h("div", { class: "logbox" }), cards = h("div", {});
       body.append(h("h3", {}, "Event log"), logBox, h("h3", {}, "Why they lost"), cards);
       renderEventLog(logBox, sim.events, sim.events.length);
