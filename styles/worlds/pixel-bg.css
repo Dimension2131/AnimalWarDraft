@@ -55,13 +55,14 @@
 :root[data-world="football"][data-theme="light"] .ink-teal { filter: url(#ink-turfD) }
 #eyeBtn { position: fixed; top: 8px; right: 62px; z-index: 60; width: 44px; height: 44px; padding: 0; cursor: pointer; border: 2px solid var(--edge-dim); border-radius: var(--w-radius); background: var(--sheet) url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAoUlEQVR42mNgGPKAEZfEpxcb/iPz+SQCGIkyAKaRV9wfRfzzy41YDWJE1wzTGDD7JooBG1LV4QYhG8JEjGZkMV5xfxTvMaFrRgYHyxwYDpY5YIijGPLpxYb/6MB/1o3/AgISKNh/1g0MdZ9ebPjPxCcRwAgLIGRg33UAKxs5UPkkAhhZYCGLzRvYNKIHJBNyPMNcAgtxYmKBuumAnJQ48AAAs8eCYILgjM0AAAAASUVORK5CYII=) center / 28px 28px no-repeat; image-rendering: pixelated }
 #eyeBtn:hover { background-color: var(--w-hover) }
+#musicBtn { position: fixed; top: 8px; right: 114px; z-index: 60 }   /* third utility button, left of the eye button (skin: styles/music-centre.css) */
 html.bgonly #eyeBtn { background-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAOklEQVR42mNgGAXDAXx6seE/xXo/vdjwnxSDcKonZBA2eRZ0RXwSAYy4DMEnhxEexLCJDlxKAnoIAAAXJ0CVdhhdrQAAAABJRU5ErkJggg==) }
 :root[data-theme="light"] #eyeBtn { background-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAl0lEQVR42mNgGPKAEZeElqLIf2T+tftvGIkyAKbx6r3XKOLaSqJYDWJB1wzTaFDwEMUAmLi2kuh/ZEOYiNGMLHb13msU7zGha0YGDxdaMDxcaIEhjmwIEz7N2NjohjBdu/+GERZAyEA+/gRWNnKgXrv/hpEFFrLaSqIYLsGmEVkzSiAiu+TCBHkMTTAxZM1USQcUp8SBBwD4rGCMdJYJ+wAAAABJRU5ErkJggg==) }
 :root[data-theme="light"].bgonly #eyeBtn { background-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAOklEQVR42mNgGAXDAWgpivynWK+Wosh/UgzCqZ6QQdjkWdAVXbv/hhGXIfjkMMKDGDbRgUtJQA8BAAAfRx3lYn8F7QAAAABJRU5ErkJggg==) }
-body:has(#topbar:not(:empty)) #eyeBtn { top: 70px }
-html.bgonly #themeBtn, html.bgonly #eyeBtn { top: 8px !important }
-body > :not(#pxcv):not(#pxband):not(#themeBtn):not(#eyeBtn) { transition: opacity .25s }
-html.bgonly body > :not(#pxcv):not(#pxband):not(#themeBtn):not(#eyeBtn) { opacity: 0 !important; visibility: hidden !important; pointer-events: none !important }
+body:has(#topbar:not(:empty)) #eyeBtn, body:has(#topbar:not(:empty)) #musicBtn { top: 70px }
+html.bgonly #themeBtn, html.bgonly #eyeBtn, html.bgonly #musicBtn { top: 8px !important }
+body > :not(#pxcv):not(#pxband):not(#themeBtn):not(#eyeBtn):not(#musicBtn):not(#musicPanel) { transition: opacity .25s }
+html.bgonly body > :not(#pxcv):not(#pxband):not(#themeBtn):not(#eyeBtn):not(#musicBtn):not(#musicPanel) { opacity: 0 !important; visibility: hidden !important; pointer-events: none !important }
 html.cv body::before { animation: none !important }
 html.cv #pxband { display: none !important }
 body:has(#topbar:not(:empty)) #themeBtn { top: 70px }

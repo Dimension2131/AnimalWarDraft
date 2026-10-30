@@ -23,7 +23,6 @@ export const SPOTS = { strict: [[50, 83], [83, 62], [17, 62], [69, 36], [38, 20]
 export const PRESETS = {
   quick: { clip: 1200, feat: 0.07, ks: 0.34, fs: 0.07, dead: 0.4, qmin: 0.035, sayPass: 0, sayOut: 0.45, sayMiss: 0.2, colour: 0.04 },
   full: { clip: 1600, feat: 0.2, ks: 0.6, fs: 0.2, dead: 0.6, qmin: 0.07, sayPass: 0.15, sayOut: 0.85, sayMiss: 0.5, colour: 0.12 },
-  detailed: { clip: 1800, feat: 0.1, ks: 1, fs: 0.7, dead: 0.8, qmin: 0.5, sayPass: 0.35, sayOut: 0.95, sayMiss: 0.8, colour: 0.18 },
   broadcast: { clip: 0, feat: 1, ks: 0.7, fs: 1, dead: 1, qmin: 0.3, sayPass: 0.55, sayOut: 1, sayMiss: 1, colour: 0.25 }
 };
 const DT = 100;        // ms of natural time per sample
