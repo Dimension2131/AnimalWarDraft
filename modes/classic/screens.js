@@ -5,6 +5,8 @@ import * as H from "./host.js";
 export default function createScreens(ctx) {
   const { h, screen, arr, secs, toast, schedule, nameOf, isHost, voterId, S, N, simulate, statStrip } = ctx;
   const screens = {};
+  // a roster row for the fight screen: picture + name + the "i" (js/infocard.js). Worlds without a profile yet get the plain name, exactly as before.
+  const nameWithInfo = (a) => { const ib = ctx.infoBtn(a); return h("span", { class: "trow-n" }, ib ? ctx.icon(a) : null, a.name, ib); };
   screens.fight = () => {
     const sims = {}, skipped = {}; let rend = null, loadedId = null, logIdx = 0, hlId = null, narrUnsub = null, narrFor = null, narr = null, panelSig = "", warned = {}, bad = {};
     const title = h("h2", {}), canvas = h("canvas", { class: "arena" });
@@ -113,7 +115,7 @@ export default function createScreens(ctx) {
           renderLossCards(cards, sim.autopsy, narr, { onClick: hl });
         } else { cards.replaceChildren(h("p", { class: "muted" }, f ? "Revealed when the fight ends." : "")); }
         // teams (stat labels carry the pack's tooltips)
-        if (f && teamsSig !== f.id) { teamsSig = f.id; teamsCard.replaceChildren(h("h3", {}, "Lineups"), ...[["A", f.a, f.teamA], ["B", f.b, f.teamB]].map(([side, k, team]) => h("div", { class: "team" }, h("div", { class: "tname" }, nameOf(k)), ...arr(team).map((a) => h("div", { class: "trow" }, h("span", {}, a.name), statStrip(a)))))); }
+        if (f && teamsSig !== f.id) { teamsSig = f.id; teamsCard.replaceChildren(h("h3", {}, "Lineups"), ...[["A", f.a, f.teamA], ["B", f.b, f.teamB]].map(([side, k, team]) => h("div", { class: "team" }, h("div", { class: "tname" }, nameOf(k)), ...arr(team).map((a) => h("div", { class: "trow" }, nameWithInfo(a), statStrip(a)))))); }
         teamsCard.hidden = !f;
         // next fight box
         nextBox.hidden = t.state !== "awaitNext";

@@ -19,13 +19,13 @@ export function subDetails({ h, tip }, a, max = 100) {
     ...SUBS.filter((x) => x.main === m.key).map((x) => ratingBar(h, tip, x.label, x.description, a[x.key], max, "sub s-" + m.key)))));
 }
 
-export function card({ h, tip, PK }, a, compact, note) {
+export function card({ h, tip, PK, info }, a, compact, note) {   // info: the "i" button helper from js/infocard.js (absent in tests that build a card on its own)
   ensureStyles();
   if (!a) return h("div", { class: "acard ph" }, h("div", { class: "plate-head" }, h("div", { class: "medal" }, h("span", { class: "qmark" }, "?")), h("div", { class: "grow" }, h("strong", { class: "aname" }, "???"), h("div", { class: "special" }, note || "Next player…"))));
   const max = PK.statMax || 100;
   return h("div", { class: "acard bb" },
     h("div", { class: "plate-head" }, h("div", { class: "bb-plate" }, photo(h, a)), h("div", { class: "grow" }, h("strong", { class: "aname" }, a.name), h("div", { class: "special" }, `${a.pos}${a.positions && a.positions.length > 1 ? " / " + a.positions.slice(1).join(" / ") : ""} · ${a.team}`),
-      h("div", { class: "row wrap tagrow" }, h("span", { class: "bb-ovr" }, a.ovr), a.legend ? h("span", { class: "pill" }, "Legend") : null, h("span", { class: "pill" }, a.position)))),
+      h("div", { class: "row wrap tagrow" }, h("span", { class: "bb-ovr" }, a.ovr), a.legend ? h("span", { class: "pill" }, "Legend") : null, h("span", { class: "pill" }, a.position))), info ? info(a) : null),
     h("div", { class: "row meta" }, (PK.cardChips ? PK.cardChips(a) : []).map((x) => h("span", { class: "chip-s" }, x))),
     compact ? null : h("div", { class: "stats" }, PK.stats.map((st) => ratingBar(h, tip, st.label, st.description, a[st.key], max, "s-" + st.key))),
     compact ? null : h("details", { class: "bb-more" }, h("summary", {}, "More details"), subDetails({ h, tip }, a, max)));

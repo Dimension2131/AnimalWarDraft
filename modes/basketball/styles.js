@@ -31,7 +31,6 @@ const CSS = `
 .bb-slot .nm{font-size:.7rem;line-height:1.1;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;pointer-events:none}
 .bb-slot .ov{position:absolute;top:-6px;right:-6px;font:800 .72rem var(--display,inherit);background:var(--yellow,#ffb347);color:#101010;padding:0 4px;pointer-events:none}
 .bb-slot .cd{font-size:.62rem;color:var(--muted,#b99);pointer-events:none}
-.bb-info{position:absolute;bottom:-7px;right:-7px;width:20px;height:20px;border-radius:50%;background:var(--blue,#4aa3ff);color:#101010;font:800 .75rem/20px var(--display,inherit);text-align:center;cursor:pointer;touch-action:manipulation}
 .bb-main7{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}
 .bb-slot.fit-warn{border-color:var(--warn,#ffc04d)}
 .bb-slot.fit-bad{border-color:var(--bad,#ff7a8a);background:rgba(80,10,20,.75)}

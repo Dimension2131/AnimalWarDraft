@@ -43,9 +43,11 @@ export default function createScreens(ctx) {
     function slotEl(i, p, slot) {
       const f = p && slot ? E.fit(p, slot) : 1, cls = "fb-slot" + (p ? "" : " empty") + (f <= 0.72 ? " fit-bad" : f <= 0.85 ? " fit-warn" : "") + (sel === i ? " sel" : "");
       if (!p) return h("div", { class: cls, "data-idx": i }, h("span", { class: "emoji" }, "·"), h("span", { class: "nm" }, slot ? slot.code : "empty"));
-      return h("button", { class: cls, type: "button", "data-idx": i, "aria-label": `${p.name}, ${slot ? slot.code : "bench"}, overall ${p.ovr}`, title: `${p.name} · ${p.pos} · OVR ${p.ovr}${slot && f < 1 ? ` · plays ${Math.round(f * 100)}% here` : ""}`,
-        onpointerdown: (ev) => down(ev, i), onclick: () => tap(i) },
-        photo(h, p, "fb-photo"), h("span", { class: "ov" }, p.ovr), h("span", { class: "nm" }, E.surname(p)), h("span", { class: "cd" }, slot ? slot.code : p.pos));
+      // wrapper keeps data-idx, drag and tap; it holds two real buttons (the player, and his "i"): a button inside a button is invalid and unreachable by keyboard
+      return h("div", { class: cls, "data-idx": i, onpointerdown: (ev) => down(ev, i), onclick: () => tap(i) },
+        h("button", { class: "fb-face", type: "button", "aria-label": `${p.name}, ${slot ? slot.code : "bench"}, overall ${p.ovr}`, title: `${p.name} · ${p.pos} · OVR ${p.ovr}${slot && f < 1 ? ` · plays ${Math.round(f * 100)}% here` : ""}` },
+          photo(h, p, "fb-photo"), h("span", { class: "ov" }, p.ovr), h("span", { class: "nm" }, E.surname(p)), h("span", { class: "cd" }, slot ? slot.code : p.pos)),
+        ctx.infoBtn(p));
     }
     function draw() {
       if (!order) return;
@@ -129,9 +131,10 @@ export default function createScreens(ctx) {
     const liveText = (f, now) => {
       const p = planFor(S.tour, f), M = p.M, r = now - f.startAt;
       if (r < 0) return [`${nameOf(f.a)} v ${nameOf(f.b)}`, `kicks off in ${secs(-r)}s`];
-      if (!M.animated) return [`${nameOf(f.a)} ${M.finalScore[0]} - ${M.finalScore[1]} ${nameOf(f.b)}`, "full time"];
-      const sc = C.scoreAt(M, r).score, done = r >= M.end;
-      return [`${nameOf(f.a)} ${sc[0]} - ${sc[1]} ${nameOf(f.b)}${done ? pensTxt(p.pens ? { pens: p.pens.score } : null) : ""}`, done ? "full time" : r >= M.total ? "penalties" : `${Math.floor(C.minuteOf(M, r))}'`];
+      // the shoot-out score belongs in every row: the final one for an Instant match and after the whistle, the running one while the kicks are being taken (the big scoreboard shows it too)
+      if (!M.animated) return [`${nameOf(f.a)} ${M.finalScore[0]} - ${M.finalScore[1]} ${nameOf(f.b)}${pensTxt(p.pens ? { pens: p.pens.score } : null)}`, "full time"];
+      const at = C.scoreAt(M, r), sc = at.score, done = r >= M.end, pp = done ? (p.pens ? p.pens.score : null) : at.pens;
+      return [`${nameOf(f.a)} ${sc[0]} - ${sc[1]} ${nameOf(f.b)}${pensTxt(pp ? { pens: pp } : null)}`, done ? "full time" : r >= M.total ? "penalties" : `${Math.floor(C.minuteOf(M, r))}'`];
     };
     function ticker(fights) {   // the matches of this round: live score, tap to watch another one
       const key = fights.map((f) => f.id).join() + "|" + watchId + "|" + curId;
@@ -195,7 +198,7 @@ export default function createScreens(ctx) {
     const played = (T) => { const out = []; for (const rd of arr(T.bracket && T.bracket.rounds)) for (const m of arr(rd)) { const r = (T.res || {})[m.id]; if (!r || r.bye || !r.w) continue; const f = Object.values(T.fights || {}).find((x) => x.mid === m.id); if (f) out.push({ m, r, f }); } return out; };
     const statsFor = (T, f) => (statCache[f.id] = statCache[f.id] || (() => { const names = [nameOf(f.a), nameOf(f.b)], p = planOf(ctx.entities.map, T, f, names, f.speed === "instant" ? "full" : undefined); return { names, st: buildStats({ M: p.M, sim: p.sim }) }; })());   // the film the match was watched with (so the final table equals the live one); an Instant match has no film, so its table uses the Full one
     function statsPanel(T, f) {   // like a match-centre team stats table: each side's players (face + name) next to the numbers, the leading side of every row highlighted
-      const d = statsFor(T, f), view = createStatsView({ h, names: d.names, kits: kitsOf(d.names), lineups: [arr(T.lineups[f.a]).slice(0, E.XI), arr(T.lineups[f.b]).slice(0, E.XI)], ent, icon: ctx.icon, surname: E.surname });
+      const d = statsFor(T, f), view = createStatsView({ h, names: d.names, kits: kitsOf(d.names), lineups: [arr(T.lineups[f.a]).slice(0, E.XI), arr(T.lineups[f.b]).slice(0, E.XI)], ent, icon: (p) => ctx.withInfo(ctx.icon(p), p), surname: E.surname });
       view.update(d.st); return h("div", {}, view.el, h("p", { class: "muted small center" }, "Shots, shots on target and cards come from the match simulation; possession, passes, fouls, corners and offsides are counted from the play."));
     }
     return { update() {
@@ -205,7 +208,7 @@ export default function createScreens(ctx) {
       const cur = list2.find((x) => x.m.id === sel);
       rc(body, ch.length ? h("p", { class: "fb-champ" }, `🏆 ${ch.map(nameOf).join(" & ")}`) : null, arr(r.order).length ? rankList(r.order) : null, T.bracket ? bracketEl(T, S.key) : h("p", { class: "muted" }, "No results recorded."),
         cur ? h("h3", {}, "Match stats") : null, cur && list2.length > 1 ? h("div", { class: "row wrap fb-st-tabs" }, list2.map((x) => h("button", { class: "btn small" + (x.m.id === sel ? " primary" : ""), type: "button", onclick: () => { sel = x.m.id; this.update(); } }, `${x.m.label}: ${nameOf(x.f.a)} ${x.r.score[0]}-${x.r.score[1]} ${nameOf(x.f.b)}`))) : null, cur ? statsPanel(T, cur.f) : null,
-        ...arr(r.order).map((k) => h("div", { class: "fb-xi" }, h("b", {}, `${nameOf(k)} · ${(T.formations || {})[k] || E.DEFAULT_FORMATION}`), h("div", { class: "row wrap" }, arr(T.lineups && T.lineups[k]).slice(0, E.XI).map((id) => ctx.icon(ent(id)))))));
+        ...arr(r.order).map((k) => h("div", { class: "fb-xi" }, h("b", {}, `${nameOf(k)} · ${(T.formations || {})[k] || E.DEFAULT_FORMATION}`), h("div", { class: "row wrap" }, arr(T.lineups && T.lineups[k]).slice(0, E.XI).map((id) => ctx.withInfo(ctx.icon(ent(id)), ent(id)))))));
     } };
   }
   return { lineup: lineupScreen, match: matchScreen, results: resultsScreen };

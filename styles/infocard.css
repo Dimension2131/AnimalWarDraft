@@ -1,0 +1,66 @@
+/* styles/infocard.css: the "i" info button and the profile panel (js/infocard.js and the per-world profile builders).
+   Colours come from the same theme tokens as everything else (--sheet, --text, --edge-dim, --teal ...), so light/dark and every world just work.
+   z-index 59: above the Music Centre panel (58), below the tooltip popover (60) so tooltips inside the panel stay readable. */
+
+/* ---------- the button: 32px hit area, ~20px visible ---------- */
+.info-i { position: relative; flex: none; display: inline-grid; place-items: center; width: 32px; height: 32px; margin: -6px; padding: 0; border: 0; background: none; color: inherit; cursor: pointer; touch-action: manipulation; font: inherit; vertical-align: middle }
+.info-i > span { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--edge-dim, #888); background: var(--sheet, #222); color: var(--text, #fff); font: 800 .72rem/1 var(--display, inherit); font-style: italic; pointer-events: none }
+.info-i:hover > span { background: var(--w-hover, var(--teal, #35e0c0)); color: var(--dark, #101010) }
+.info-i:focus-visible { outline: 3px solid var(--teal, #35e0c0); outline-offset: 0; border-radius: 50% }
+.info-wrap { display: inline-flex; align-items: center; gap: 2px }
+/* on a slot / picture the button floats over the bottom-right corner */
+.info-over { position: absolute; right: -9px; bottom: -9px; z-index: 3; margin: 0 }
+
+/* ---------- the panel ---------- */
+#infoPanel { position: fixed; top: 60px; left: 10px; z-index: 59; width: min(420px, calc(100vw - 16px)); max-height: min(78dvh, 640px); display: flex; flex-direction: column; overflow: hidden;
+  background: var(--sheet); color: var(--text); border: 2px solid var(--edge-dim); border-radius: var(--w-radius, 6px); box-shadow: var(--offset, 4px 4px 0 rgba(0, 0, 0, .4)); font: 400 .9rem/1.4 var(--body, inherit); animation: ic-in .14s ease-out }
+#infoPanel[hidden] { display: none }
+.ic-head { display: flex; align-items: center; gap: 6px; padding: 8px 8px 6px 12px; border-bottom: 2px solid var(--rule, var(--edge-dim)) }
+.ic-title { flex: 1; min-width: 0; margin: 0; font: 1rem var(--display, inherit); letter-spacing: .06em; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.ic-x { flex: none; width: 36px; height: 36px; padding: 0; cursor: pointer; border: 2px solid var(--edge-dim); border-radius: var(--w-radius, 6px); background: var(--field, transparent); color: inherit; font: 800 1.3rem/1 var(--display, inherit) }
+.ic-x:hover { background: var(--w-hover, var(--teal)); color: var(--dark, #101010) }
+.ic-x:focus-visible { outline: 3px solid var(--teal); outline-offset: 2px }
+.ic-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 8px 12px 14px; display: grid; gap: 12px; align-content: start; overscroll-behavior: contain }
+.ic-body:focus { outline: none }
+
+/* ---------- content helpers ---------- */
+.ic-sec { display: grid; gap: 4px; min-width: 0 }
+.ic-h { margin: 0 0 2px; padding-bottom: 2px; border-bottom: 2px solid var(--rule, var(--edge-dim)); font: .8rem var(--display, inherit); letter-spacing: .1em; text-transform: uppercase; color: var(--muted) }
+.ic-kv { display: flex; justify-content: space-between; gap: 10px; align-items: baseline }
+.ic-k { color: var(--muted); min-width: 0 }
+.ic-v { text-align: right; min-width: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums }
+.ic-bar { display: grid; grid-template-columns: minmax(5.5rem, 38%) 1fr 2.6rem; gap: 8px; align-items: center }
+.ic-bar .ic-v { text-align: right }
+.ic-track { display: block; height: 9px; background: var(--field, #111); border: 1px solid var(--edge-dim) }
+.ic-track i { display: block; height: 100%; background: var(--c, var(--teal, #35e0c0)) }
+.ic-bar.sub { padding-left: 10px; font-size: .84rem }
+.ic-bar.sub .ic-track { height: 6px }
+.ic-bar.hidden-stat .ic-k::after { content: " (hidden)"; font-size: .72em }
+.ic-chips { display: flex; flex-wrap: wrap; gap: 4px }
+.ic-chip { display: inline-block; padding: 1px 7px; border: 1.5px solid var(--edge-dim); border-radius: var(--w-radius, 6px); font-size: .8rem; background: var(--field, transparent) }
+.ic-chip.up { border-color: var(--good, #35e07f) }
+.ic-chip.down { border-color: var(--bad, #ff7a8a) }
+.ic-formula { display: block; padding: 4px 8px; background: var(--field, #111); border-left: 3px solid var(--teal, #35e0c0); font: .8rem/1.45 ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere }
+.ic-note { margin: 0; color: var(--muted); font-size: .84rem }
+.ic-list { margin: 0; padding-left: 1.1rem; display: grid; gap: 3px }
+.ic-body .has-tip { cursor: help; text-decoration: underline dotted; text-underline-offset: 3px }
+
+/* ---------- phones: a bottom sheet ---------- */
+@media (max-width: 599px) {
+  #infoPanel { top: auto !important; left: 0 !important; right: 0; bottom: 0; width: auto; max-height: 82dvh; border-width: 2px 0 0; border-radius: var(--w-radius, 6px) var(--w-radius, 6px) 0 0; animation: ic-up .16s ease-out }
+}
+@keyframes ic-in { from { opacity: 0; transform: translateY(-4px) } to { opacity: 1; transform: none } }
+@keyframes ic-up { from { transform: translateY(24px) } to { transform: none } }
+@media (prefers-reduced-motion: reduce) { #infoPanel { animation: none } }
+
+/* ---------- places that carry the button ---------- */
+.plate-head > .info-i { align-self: flex-start; margin: -2px -4px 0 0 }   /* draft card (all worlds): top-right corner of the card header */
+.trow-n { display: inline-flex; align-items: center; gap: 6px; min-width: 0 }   /* fight screen "Lineups" card: picture + name + "i" */
+.trow-n img.sil, .trow-n .emoji { width: 28px; height: 28px; flex: none; object-fit: contain; font-size: 1.3rem; line-height: 28px; text-align: center }
+.lrow > .info-i { margin-left: 4px }   /* line-up row (animals): next to the stat strip */
+.fb-st-pl .info-wrap, .bb-five .info-wrap, .fb-xi .info-wrap { align-items: flex-start }
+/* line-up slots (football and basketball): the wrapper div is the draggable slot; the face is its player button, the "i" a sibling button */
+.bb-slot > .info-i, .fb-slot > .info-i { position: absolute; right: -9px; bottom: -9px; z-index: 3; margin: 0 }
+.bb-face, .fb-face { display: grid; justify-items: center; gap: 2px; width: 100%; margin: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: inherit; touch-action: none; user-select: none; -webkit-user-select: none }
+.bb-face:focus-visible, .fb-face:focus-visible { outline: 3px solid var(--teal, #35e0c0); outline-offset: 2px }
+.bb-face img, .fb-face img { pointer-events: none }

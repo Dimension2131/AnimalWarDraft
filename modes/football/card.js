@@ -19,13 +19,13 @@ export function photo(h, a, cls) {
   });
 }
 
-export function card({ h, tip, PK }, a, compact, note) {
+export function card({ h, tip, PK, info }, a, compact, note) {   // info: the "i" button helper from js/infocard.js (absent in tests that build a card on its own)
   ensureStyles();
   if (!a) return h("div", { class: "acard ph" }, h("div", { class: "plate-head" }, h("div", { class: "medal" }, h("span", { class: "qmark" }, "?")), h("div", { class: "grow" }, h("strong", { class: "aname" }, "???"), h("div", { class: "special" }, note || "Next player…"))));
   const stats = statsFor(PK, a), max = PK.statMax || 100;
   return h("div", { class: "acard fb" },
     h("div", { class: "plate-head" }, h("div", { class: "fb-plate" }, photo(h, a)), h("div", { class: "grow" }, h("strong", { class: "aname" }, a.name), h("div", { class: "special" }, `${a.pos} · ${a.nation}`),
-      h("div", { class: "row wrap tagrow" }, h("span", { class: "fb-ovr" }, a.ovr), a.icon ? h("span", { class: "pill fb-icon" }, "Icon") : null, h("span", { class: "pill" }, a.position)))),
+      h("div", { class: "row wrap tagrow" }, h("span", { class: "fb-ovr" }, a.ovr), a.icon ? h("span", { class: "pill fb-icon" }, "Icon") : null, h("span", { class: "pill" }, a.position))), info ? info(a) : null),
     h("div", { class: "row meta" }, (PK.cardChips ? PK.cardChips(a) : []).map((x) => h("span", { class: "chip-s" }, x))),
     compact ? null : h("div", { class: "stats" }, stats.map((st) => h("div", { class: "stat s-" + st.key }, tip(h("span", {}, st.label), st.description), h("div", { class: "sbar" }, h("i", { style: `width:${Math.min(100, (a[st.key] / max) * 100)}%` })), h("b", {}, a[st.key])))));
 }

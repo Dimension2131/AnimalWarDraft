@@ -3,6 +3,10 @@ import { loadPackData } from "./animals.js";
 import * as P from "./pack.js";
 import * as M from "./modes.js";
 import { tip, installTips } from "./tips.js";
+import { installInfo, infoBtn, withInfo } from "./infocard.js";
+import "../packs/animals/profile.js";   // each world registers its info profile builder on load (js/infocard.js)
+import "../modes/basketball/profile.js";
+import "../modes/football/profile.js";
 import { simulate, validateAnimals, balanceTest } from "./sim.js";
 import * as FBC from "../modes/football/card.js";
 import * as BBC from "../modes/basketball/card.js";
@@ -12,6 +16,8 @@ const $ = (s, r = document) => r.querySelector(s);
 // DOM replaceChildren() turns null/undefined/false into the TEXT "null": every call goes through rc(), which drops them (like h() does).
 const rc = (el, ...kids) => el.replaceChildren(...kids.flat(Infinity).filter((k) => k != null && k !== false));
 const arr = (v) => (Array.isArray(v) ? v : v ? Object.values(v) : []);
+// Rebuild a panel only when the data behind it changed. update() runs on every database tick, and a blind rebuild throws away the DOM state the player is using: an opened roster, a text selection, a half-finished tap.
+const changed = (el, sig) => { sig = typeof sig === "string" ? sig : JSON.stringify(sig); if (el._sig === sig) return false; el._sig = sig; return true; };
 const icon = (a, eager) => {
   const em = () => h("span", { class: "emoji" }, a.emoji);
   let src = a.iconUrl || a.silhouette;   // iconUrl = small colour sprite (Pokémon); silhouette = ink-filtered shape (animals)
@@ -104,6 +110,7 @@ async function main() {
   catch (e) { rc(root, h("section", { class: "screen" }, h("h1", {}, "Could not load Firebase"), h("p", {}, String(e)), h("p", { class: "muted" }, "Open this page through a web server (https or http://localhost), not file://, and check your connection."))); return; }
 
   installTips();
+  installInfo(() => ({ ctx: uiCtx, world: PK.engine || "animals", entity: (id) => ENT.map.get(id) }));   // lazy: uiCtx and PK are read at click time
   const S = { code: null, role: null, key: null, name: "", connected: true, loaded: {}, chat: [], view: "home" };
   const [DEFAULT, MODES, PACKS] = await early; let PK = DEFAULT.pack, ENT = { list: DEFAULT.list, map: DEFAULT.map }, MD = (await M.getMode()), ctxKey = "", ctxLoading = "";
   const modeScreens = {}; let homePack = PK.id;
@@ -193,7 +200,7 @@ async function main() {
     rc(tb);
     if (S.code) {
       tb.append(h("span", { class: "brand" }, PK.title), h("span", { class: "code" }, S.code), h("span", { class: "who" }, S.role === "spectator" ? "spectating" : S.name), ...(isHost() ? [h("span", { class: "pill host" }, "host")] : []),
-        h("span", { class: S.connected ? "dot on" : "dot" }), h("button", { class: "btn small", onclick: leave }, "Leave"));
+        h("span", { class: S.connected ? "dot on" : "dot" }), h("span", { class: "tb-gap", "aria-hidden": "true" }), h("button", { class: "btn small", onclick: leave }, "Leave"));
     }
     const taken = S.role === "player" && S.loaded.players && S.players && S.players[S.key] && S.players[S.key].sid && S.players[S.key].sid !== N.sid;
     let msg = "";
@@ -252,8 +259,8 @@ async function main() {
   }
   function animalCard(a, compact, note, hideTraits) {
     if (PK.engine === "pokemon") return pokemonCard(a, compact, note);
-    if (PK.engine === "football") return FBC.card({ h, tip, PK }, a, compact, note);
-    if (PK.engine === "basketball") return BBC.card({ h, tip, PK }, a, compact, note);
+    if (PK.engine === "football") return FBC.card({ h, tip, PK, info: infoBtn }, a, compact, note);
+    if (PK.engine === "basketball") return BBC.card({ h, tip, PK, info: infoBtn }, a, compact, note);
     const stats = P.engineStats(PK);
     const zone = (statVals, tileVals, ta) => compact ? null : h("div", { class: "statzone" },
       h("div", { class: "stats" }, stats.map((st) => { const s = st.key; return h("div", { class: "stat s-" + s }, tip(h("span", {}, st.label), st.description), h("div", { class: "sbar" }, h("i", { style: `width:${statVals ? statVals[s] : 0}%` })), h("b", {}, statVals ? statVals[s] : "?")); }), toughRow(ta)),
@@ -265,7 +272,7 @@ async function main() {
       h("div", { class: "row wrap traitrow" }),
       zone(null, null, null));
     return h("div", { class: "acard" },
-      h("div", { class: "plate-head" }, h("div", { class: "medal" }, icon(a, !compact)), h("div", { class: "grow" }, h("strong", { class: "aname" }, a.name), h("div", { class: "special" }, a.special || ""))),
+      h("div", { class: "plate-head" }, h("div", { class: "medal" }, icon(a, !compact)), h("div", { class: "grow" }, h("strong", { class: "aname" }, a.name), h("div", { class: "special" }, a.special || "")), infoBtn(a, { hideTraits: !!hideTraits })),   // hideTraits = mystery lot: the panel must not show what the card hides
       h("div", { class: "row meta" }, (PK.cardChips ? PK.cardChips(a) : []).map((x) => h("span", { class: "chip-s" }, x))),
       h("div", { class: "row wrap tagrow" }, arr(a.tags).map((t) => h("span", { class: "pill tag-" + t }, t))),
       h("div", { class: "row wrap traitrow" }, ...traitPills(a, hideTraits)),
@@ -298,7 +305,7 @@ async function main() {
     return { el, update };
   }
   const uiCtx = {
-    playAgainBar,
+    playAgainBar, infoBtn, withInfo,
     h, screen, arr, secs, toast, schedule, icon, bar, animalCard, statStrip, tip, S, N, R,
     nameOf, isHost, voterId, settings, leave: () => leave(),
     runner: () => runner,
@@ -472,7 +479,7 @@ async function main() {
 
   // ================= DRAFT =================
   screens.draft = () => {
-    let barMax = 1000, lastId = null, bidTouched = false;
+    let barMax = 1000, lastId = null, bidTouched = false; const openRos = new Set(); let rosSeen = false;
     const cd = bar(settings().auctionSeconds), cdText = h("div", { class: "cdnum" }), msg = h("div", { class: "center muted lotmsg" }), cardBox = h("div", { class: "d-card" }), topInfo = h("div", { class: "d-top" }), bigBid = h("div", { class: "bigbid" });
     const bidIn = h("input", { type: "number", min: 1, step: 1, oninput: () => { bidTouched = true; } });
     const quick = (label, fn) => h("button", { class: "btn small", onclick: () => { bidTouched = true; bidIn.value = Math.max(+bidIn.min, Math.min(+bidIn.max || 1e9, fn())); } }, label);
@@ -499,10 +506,13 @@ async function main() {
         const active = A && !A.resolved && A.id === (L.drawIndex || 0), a = A && ENT.map.get(A.animalId);
         { const pool = arr(G.pool), di = L.drawIndex || 0; preload(pool.slice(di, di + 4).map((id) => cardImage(PK, ENT.map.get(id)))); }   // the current lot first, then the next three: ready before they are dealt
         if (A && A.id !== lastId) { lastId = A.id; barMax = Math.max(1000, A.deadline - N.now()); bidTouched = false; }
-        rc(topInfo, h("div", { class: "lotbar" }, h("span", { class: "lotno" }, `Lot ${Math.min((L.drawIndex || 0) + 1, arr(G.pool).length)} of ${arr(G.pool).length}`), L.stall ? h("span", { class: "pill" }, `${L.stall} of ${settings().stallLimit ?? R.STALL_LIMIT} unsold in a row`) : null),
+        if (changed(topInfo, [L.drawIndex || 0, arr(G.pool).length, L.stall || 0, st.stallLimit, st.rosterSize, S.role, bal[me], arr(ros[me]).map((x) => x.id)]))
+          rc(topInfo, h("div", { class: "lotbar" }, h("span", { class: "lotno" }, `Lot ${Math.min((L.drawIndex || 0) + 1, arr(G.pool).length)} of ${arr(G.pool).length}`), L.stall ? h("span", { class: "pill" }, `${L.stall} of ${settings().stallLimit ?? R.STALL_LIMIT} unsold in a row`) : null),
           S.role === "player" ? h("div", { class: "purse" }, h("b", {}, `$${bal[me] ?? 0}`), h("span", { class: "muted" }, `left, ${rn()} ${arr(ros[me]).length} of ${st.rosterSize}`)) : h("div", { class: "pill" }, "spectating"), S.role === "player" && PK.draftTip ? h("p", { class: "fb-tip" }, PK.draftTip(arr(ros[me]).map((x) => ENT.map.get(x.id)).filter(Boolean), st.rosterSize)) : null);
         const sold = A && A.resolved && A.outcome && A.outcome.winner ? ENT.map.get(A.outcome.animalId) : null;   // mystery traits: the bought animal is shown once with its traits revealed
-        rc(cardBox, active && a ? animalCard(a, false, null, !!st.mysteryTraits) : sold && st.mysteryTraits ? animalCard(sold, false, null, false) : animalCard(null, false, A && A.resolved && A.outcome ? "Resolved…" : `Next ${PK.nouns.singular}…`));
+        // Rebuilt only when what it shows changes: update() runs many times a second, and a rebuilt card would swallow a tap on its "i".
+        const cardKey = active && a ? `lot:${a.id}:${!!st.mysteryTraits}` : sold && st.mysteryTraits ? `sold:${sold.id}` : `ph:${A && A.resolved && A.outcome ? 1 : 0}`;
+        if (cardBox._key !== cardKey) { cardBox._key = cardKey; rc(cardBox, active && a ? animalCard(a, false, null, !!st.mysteryTraits) : sold && st.mysteryTraits ? animalCard(sold, false, null, false) : animalCard(null, false, A && A.resolved && A.outcome ? "Resolved…" : `Next ${PK.nouns.singular}…`)); }
         const isPart = !!(A && A.participants && A.participants[me]), elig = !!(A && A.eligible && A.eligible[me]), skipped = !!(A && A.skips && A.skips[me]), top = A && A.top;
         const iTop = top && top.key === me, isPlayer = S.role === "player";
         const inClaim = !!(active && A.status === "claim" && A.claim && A.claim.key === me && !A.claim.taken && !A.claim.declined);
@@ -523,15 +533,22 @@ async function main() {
         idleBox.hidden = !(isPlayer && bidBox.hidden && claimBox.hidden); slot.classList.toggle("on", isPlayer);
         bidIn.min = minBid; bidIn.max = limit; if (!bidTouched || +bidIn.value < minBid) bidIn.value = Math.min(minBid, Math.max(limit, 1));
         bidBtn.disabled = !canBid || minBid > limit; skipBtn.disabled = !(isPlayer && active && A.status === "bidding" && isPart && !skipped && !iTop); bidIn.disabled = !canBid;
-        rc(tbl, h("h3", {}, "Players"), ...(G.keys ? arr(G.keys) : []).map((k) => {
+        const rows = (G.keys ? arr(G.keys) : []).map((k) => {
           const tags = []; if (A && active) { if (A.top && A.top.key === k) tags.push("top"); if (A.skips && A.skips[k]) tags.push("skipped"); if (A.participants && !A.participants[k]) tags.push("full"); if (A.participants && A.participants[k] && !(A.eligible && A.eligible[k])) tags.push("broke"); }
           if (S.players && S.players[k] && !S.players[k].online) tags.push("offline");
-          return h("div", { class: "row between" }, h("span", {}, nameOf(k), k === me ? h("span", { class: "pill you" }, "you") : null), h("span", { class: "muted" }, `$${bal[k] ?? 0} with ${arr(ros[k]).length}/${st.rosterSize} ${PK.nouns.plural} `, tags.map((t) => h("span", { class: "pill " + t }, t))));
-        }));
+          return { k, name: nameOf(k), you: k === me, bal: bal[k] ?? 0, n: arr(ros[k]).length, tags };
+        });
+        if (changed(tbl, [rows, st.rosterSize, PK.nouns.plural]))
+          rc(tbl, h("h3", {}, "Players"), ...rows.map((r) => h("div", { class: "row between" }, h("span", {}, r.name, r.you ? h("span", { class: "pill you" }, "you") : null), h("span", { class: "muted" }, `$${r.bal} with ${r.n}/${st.rosterSize} ${PK.nouns.plural} `, r.tags.map((t) => h("span", { class: "pill " + t }, t))))));
         const entries = Object.entries(L.log || {}).sort((x, y) => +y[0] - +x[0]).slice(0, 8);
-        rc(logBox, h("h3", {}, "Draft log"), ...entries.map(([, t]) => h("div", { class: "logline" + (t.startsWith("STALL") ? " stall" : "") }, t)));
-        rc(rosters, h("h3", {}, P.cap(rns())), ...(G.keys ? arr(G.keys) : []).map((k) => h("details", { open: k === me }, h("summary", {}, `${nameOf(k)} (${arr(ros[k]).length})`),
-          ...arr(ros[k]).map((x) => { const an = ENT.map.get(x.id); return h("div", { class: "row between small" }, h("span", {}, an && PK.rosterTag ? [h("span", { class: "pill rtag" }, PK.rosterTag(an)), " "] : null, an ? an.name : x.id), h("span", { class: "muted" }, x.price ? `$${x.price}` : "free")); }))));
+        if (changed(logBox, entries))
+          rc(logBox, h("h3", {}, "Draft log"), ...entries.map(([, t]) => h("div", { class: "logline" + (t.startsWith("STALL") ? " stall" : "") }, t)));
+        // Rosters: which ones are open lives in openRos (not in the DOM), so a rebuild can never close the one somebody is reading. Your own starts open, every other starts closed.
+        if (!rosSeen && S.role === "player") { openRos.add(me); rosSeen = true; }
+        const rosData = (G.keys ? arr(G.keys) : []).map((k) => [k, nameOf(k), arr(ros[k]).map((x) => [x.id, x.price || 0])]);
+        if (changed(rosters, [rosData, rns()]))
+          rc(rosters, h("h3", {}, P.cap(rns())), ...rosData.map(([k, nm, list]) => h("details", { open: openRos.has(k), ontoggle: (e) => { if (e.target.open) openRos.add(k); else openRos.delete(k); } }, h("summary", {}, `${nm} (${list.length})`),
+            ...list.map(([id, price]) => { const an = ENT.map.get(id); return h("div", { class: "row between small" }, h("span", {}, an && PK.rosterTag ? [h("span", { class: "pill rtag" }, PK.rosterTag(an)), " "] : null, an ? an.name : id), h("span", { class: "muted" }, price ? `$${price}` : "free")); }))));
       }
     };
   };
@@ -583,7 +600,7 @@ async function main() {
         const grip = h("button", { class: "grip", type: "button", "aria-label": `Move ${a.name}. Drag, or use the arrow keys.`, title: "Drag to reorder", onpointerdown: (e) => startDrag(e, i), onkeydown: (e) => gripKey(e, i) });
         const sl = MD.lineup && MD.lineup.slot ? MD.lineup.slot(i, a, uiCtx) : null;   // a mode may label slots (race: leg per slot)
         return h("div", { class: "lrow" + (!sl && i < R.FRONT_SLOTS ? " front" : "") + (i === 0 ? " first" : "") + (!sl && i === R.FRONT_SLOTS ? " firstback" : "") + (sl && sl.cls ? " " + sl.cls : "") },
-          grip, h("span", { class: "pos" }, i + 1), icon(a), h("span", { class: "grow" }, a.name, sl && sl.node), a.speed != null ? statStrip(a) : null);
+          grip, h("span", { class: "pos" }, i + 1), icon(a), h("span", { class: "grow" }, a.name, sl && sl.node), a.speed != null ? statStrip(a) : null, infoBtn(a));
       }));
     }
     return {

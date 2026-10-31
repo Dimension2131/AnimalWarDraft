@@ -2962,3 +2962,35 @@ body.flash::after {
 .again-btns [hidden] {
   display: none !important
 }
+/* ================= phones: the top bar carries the eye / light-dark / music buttons too (js/pxbg.js dock()) ================= */
+/* .tb-gap is an empty spacer whose width is --dock-w (set by dock()): the three fixed buttons sit on top of it, so nothing in the bar can run underneath them. It also takes over Leave's "push to the right" margin. */
+#topbar .tb-gap { flex: 0 0 var(--dock-w, 0px); margin-left: auto; height: 1px; pointer-events: none }
+#topbar .tb-gap+.btn { margin-left: 0 }
+#topbar .who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+#topbar .code, #topbar .pill.host, #topbar .dot { flex: none }
+#topbar .pill.host { margin-left: 0 }
+
+@media(max-width:640px) {
+  #topbar { flex-wrap: nowrap !important; gap: 6px; padding-left: 10px; padding-right: 10px; min-height: 48px }
+  #topbar .code { font-size: .95rem; letter-spacing: .08em }
+  #topbar .who { font-size: .9rem }
+  #topbar .btn.small { padding: 6px 10px; min-height: 34px; font-size: .85rem }
+  #topbar .pill.host { font-size: .62rem; padding: 1px 5px }
+  #banner { top: max(48px, calc(42px + env(safe-area-inset-top))) }
+
+  /* draft screen on a phone: rows may wrap instead of squeezing, roster headers are real tap targets, long names never push the page sideways */
+  .d-tbl .row.between, .d-ros .row.between { flex-wrap: wrap; gap: 2px 10px }
+  .d-ros summary { padding: 10px 0; cursor: pointer; touch-action: manipulation }
+  .d-ros details { border-top: 1px solid var(--rule) }
+  .d-log .logline, .d-tbl .row, .d-ros .row { overflow-wrap: anywhere }
+  .draftgrid .acard { max-width: 100% }
+  .bidrow { flex-wrap: wrap }
+  .bidrow input { min-width: 0; flex: 1 1 90px }
+  .screen { padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)) }
+}
+@media(max-width:360px) {
+  #topbar { gap: 4px; padding-left: 8px; padding-right: 8px }
+  #topbar .code { font-size: .85rem; letter-spacing: .04em }
+  #topbar .who { font-size: .82rem }
+  #topbar .btn.small { padding: 5px 8px }
+}

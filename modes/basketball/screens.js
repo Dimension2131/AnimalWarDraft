@@ -3,7 +3,7 @@ import { planOf } from "./host.js";
 import * as B from "./bracket.js";
 import * as P from "./replay.js";
 import { teamRows, leaders, quarterTable } from "./stats.js";
-import { photo, subDetails, ratingBar } from "./card.js";
+import { photo } from "./card.js";
 import { ensureStyles } from "./styles.js";
 import * as C from "./choreo.js";
 import { createViewer } from "./viewer.js";
@@ -23,7 +23,7 @@ export default function createScreens(ctx) {
 
   // =============== LINEUP: starting five, bench rotation, tactics; drag & drop / tap to swap ===============
   function lineupScreen() {
-    let order = null, tactics = { ...E.DEFAULT_TACTICS }, dirty = false, pending = null, sel = -1, drag = null, suppressClick = false, lastMode = "", info = "", showSubs = false;
+    let order = null, tactics = { ...E.DEFAULT_TACTICS }, dirty = false, pending = null, sel = -1, drag = null, suppressClick = false, lastMode = "", showSubs = false;
     const court = h("div", { class: "bb-court" }), infoBox = h("div", { class: "card" }), tableBox = h("div", { class: "bb-scroll" }), benchBox = h("div", { class: "bb-bench" }), strength = h("div", { class: "row wrap" }), cd = bar(ctx.mode.lineupMs / 1000), cdText = h("div", { class: "center" }), status = h("div", { class: "card" });
     const intro = h("p", { class: "muted" });
     const save = (done) => { dirty = false; clearTimeout(pending); return N.put(S.code, `lineups/${S.key}`, JSON.parse(JSON.stringify({ order, done: !!done, tactics }))).catch((e) => toast(e.message)); };
@@ -44,16 +44,18 @@ export default function createScreens(ctx) {
       const spot = slot ? (SPOTS[posMode()] || SPOTS.strict)[slot.i] : null, style = spot ? `left:${spot[0]}%;top:${spot[1]}%` : null;
       const code = slot ? (slot.code === "ANY" ? p ? p.pos : "" : slot.code) : p ? p.pos : "";
       if (!p) return h("div", { class: cls, "data-idx": i, style }, h("span", { class: "emoji" }, "·"), h("span", { class: "nm" }, slot ? slot.code : "empty"));
-      return h("button", { class: cls, type: "button", style, "data-idx": i, "aria-label": `${p.name}, ${slot ? slot.code : "bench"}, overall ${p.ovr}`, title: `${p.name} · ${p.pos} · OVR ${p.ovr}${slot && f < 1 ? ` · plays at ${Math.round(f * 100)}% here` : ""}`, onpointerdown: (ev) => down(ev, i), onclick: () => tap(i) },
-        photo(h, p, "bb-photo"), h("span", { class: "ov" }, p.ovr), slot ? null : h("span", { class: "rk" }, "#" + (i - E.STARTERS + 1)), h("span", { class: "nm" }, E.surname(p)), h("span", { class: "cd" }, code),
-        h("span", { class: "bb-info", role: "button", title: "Show his ratings", "aria-label": `Ratings of ${p.name}`, onpointerdown: (ev) => ev.stopPropagation(), onclick: (ev) => { ev.stopPropagation(); info = p.id; drawInfo(); } }, "i"));
+      // A wrapper (it keeps data-idx, the drag and the tap, so drag-and-drop and tap-to-swap work as before) holding TWO real buttons: the player and his "i".
+      // A button inside a button is invalid HTML and unreachable by keyboard, hence the sibling layout.
+      return h("div", { class: cls, style, "data-idx": i, onpointerdown: (ev) => down(ev, i), onclick: () => tap(i) },
+        h("button", { class: "bb-face", type: "button", "aria-label": `${p.name}, ${slot ? slot.code : "bench"}, overall ${p.ovr}`, title: `${p.name} · ${p.pos} · OVR ${p.ovr}${slot && f < 1 ? ` · plays at ${Math.round(f * 100)}% here` : ""}` },
+          photo(h, p, "bb-photo"), h("span", { class: "ov" }, p.ovr), slot ? null : h("span", { class: "rk" }, "#" + (i - E.STARTERS + 1)), h("span", { class: "nm" }, E.surname(p)), h("span", { class: "cd" }, code)),
+        ctx.infoBtn(p));
     }
-    // ratings of the selected player (main ratings, and under "More details" every sub rating) and a table of the whole roster
+    // the roster table; a player's full profile is behind his "i" (js/infocard.js)
     function drawInfo() {
-      const p = info && order && order.includes(info) ? ent(info) : null, toggle = h("button", { class: "btn small", type: "button", onclick: () => { showSubs = !showSubs; drawInfo(); } }, showSubs ? "Hide details" : "More details");
-      rc(infoBox, h("div", { class: "row between" }, h("strong", {}, p ? `${p.name} · ${p.pos}${p.positions && p.positions.length > 1 ? " / " + p.positions.slice(1).join(" / ") : ""} · ${p.team} · OVR ${p.ovr}` : "Player ratings"), toggle),
-        p ? h("div", { class: "stats bb-main7" }, E.MAINS.map((m) => ratingBar(h, tipOf, m.label, m.description, p[m.key], 100, "s-" + m.key))) : h("p", { class: "bb-hint" }, "Tap the \u201Ci\u201D on a player to see his ratings."),
-        p && showSubs ? subDetails({ h, tip: tipOf }, p, 100) : null);
+      const toggle = h("button", { class: "btn small", type: "button", onclick: () => { showSubs = !showSubs; drawInfo(); } }, showSubs ? "Hide details" : "More details");
+      rc(infoBox, h("div", { class: "row between" }, h("strong", {}, "Player ratings"), toggle),
+        h("p", { class: "bb-hint" }, "Tap the \u201Ci\u201D on a player to see his ratings."));
       const ids = order || [], cols = showSubs ? E.SUBS : [], head = h("tr", {}, h("th", {}, "Player"), h("th", {}, "Pos"), h("th", {}, "OVR"), ...E.MAINS.map((m) => tipOf(h("th", { class: "m-" + m.key }, m.abbr), m.label)), ...cols.map((x) => tipOf(h("th", { class: "sub" }, x.abbr), x.label)));
       rc(tableBox, h("table", { class: "bb-tbl" }, head, ...ids.map((id, i) => { const q = ent(id); return h("tr", { class: i < E.STARTERS ? "" : "dnp" }, h("td", { class: "n" }, q.name), h("td", {}, q.pos), h("td", {}, q.ovr), ...E.MAINS.map((m) => h("td", {}, q[m.key])), ...cols.map((x) => h("td", { class: "sub" }, q[x.key]))); })));
     }
@@ -238,7 +240,7 @@ export default function createScreens(ctx) {
       rc(body, ch.length ? h("p", { class: "bb-champ" }, `🏆 ${ch.map(nameOf).join(" & ")}`) : null, arr(r.order).length ? rankList(r.order) : null, T.bracket ? bracketEl(T, S.key) : h("p", { class: "muted" }, "No results recorded."),
         cur ? h("h3", {}, "Game stats") : null, cur && list2.length > 1 ? h("div", { class: "row wrap" }, list2.map((x) => h("button", { class: "btn small" + (x.m.id === sel ? " primary" : ""), type: "button", onclick: () => { sel = x.m.id; this.update(); } }, `${x.m.label}: ${nameOf(x.f.a)} ${x.r.score[0]}-${x.r.score[1]} ${nameOf(x.f.b)}`))) : null,
         d ? statsTable(d.sim, d.names) : null, d ? boxTable(d.sim, 0, d.names[0]) : null, d ? boxTable(d.sim, 1, d.names[1]) : null,
-        ...arr(r.order).map((k) => h("div", { class: "bb-five" }, h("b", {}, `${nameOf(k)}`), h("div", { class: "row wrap" }, arr(T.lineups && T.lineups[k]).slice(0, E.STARTERS).map((id) => ctx.icon(ent(id)))))));
+        ...arr(r.order).map((k) => h("div", { class: "bb-five" }, h("b", {}, `${nameOf(k)}`), h("div", { class: "row wrap" }, arr(T.lineups && T.lineups[k]).slice(0, E.STARTERS).map((id) => ctx.withInfo(ctx.icon(ent(id)), ent(id)))))));
     } };
   }
   return { lineup: lineupScreen, match: matchScreen, results: resultsScreen };
