@@ -186,7 +186,7 @@ const t0 = () => now();
 export function applySkip(a, key) {
   if (!a || a.resolved) return undefined;
   if (a.status === "bidding") {
-    if (!(a.eligible && a.eligible[key])) return undefined;
+    if (!(a.participants && a.participants[key])) return undefined;   // anyone in the lot may skip, broke players too (they cannot bid, but waiting out the timer helps nobody)
     if (a.top && a.top.key === key) return undefined;
     a.skips = a.skips || {}; a.skips[key] = true;
     const left = Object.keys(a.participants || {}).filter((k) => !a.skips[k]);   // everyone else skipped: go straight to the free claim, no wait for the host tick
