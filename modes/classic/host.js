@@ -241,7 +241,7 @@ export function createHost(ctx) {
   function nextStage(fid, winnerKey, verdict) {
     const s = settings(), mode = s.judgeMode, f = ((S.tour || {}).fights || {})[fid] || {};
     const inFight = new Set([f.a, f.b]), voters = {};
-    Object.entries(S.players || {}).forEach(([k, p]) => { if (!inFight.has(k) && p.online) voters[k] = true; });
+    Object.entries(S.players || {}).forEach(([k, p]) => { if (!inFight.has(k) && p.online && !p.bot && !p.gaveUp) voters[k] = true; });
     if (s.spectatorVoting) Object.keys(S.spectators || {}).forEach((id) => { voters[id] = true; });
     const toVote = (mode === "vote" || mode === "auto") && Object.keys(voters).length >= 2, from = ["rebuttal", "ai"], extra = verdict ? { verdict } : {};
     if (toVote) return setAppeal(fid, (c) => (from.includes(c.status) ? { ...c, ...extra, status: "voting", voters, votes: {}, deadline: N.now() + R.VOTE_MS } : undefined));

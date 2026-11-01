@@ -113,9 +113,10 @@ export async function joinRoom(code, name, wantRole) {
     }, { applyLocally: false });
 
     const players = (await getVal(code, "players")) || {};
-    if (Object.keys(players).length > R.MAX_PLAYERS && pres.snapshot.val().sid === sid && !(meta.settings && players[key] && players[key].old)) {
+    const humans = Object.fromEntries(Object.entries(players).filter(([, p]) => p && !p.bot));   // bots never take a person's seat: the host trims them when the room is over capacity (js/host.js botSync)
+    if (Object.keys(humans).length > R.MAX_PLAYERS && pres.snapshot.val().sid === sid && !(meta.settings && players[key] && players[key].old)) {
       const mine = players[key];
-      const earlier = Object.entries(players).filter(([k, p]) => k !== key && (p.joinedAt || 0) <= (mine.joinedAt || 0)).length;
+      const earlier = Object.entries(humans).filter(([k, p]) => k !== key && (p.joinedAt || 0) <= (mine.joinedAt || 0)).length;
       if (earlier >= R.MAX_PLAYERS) { await remove(rp(code, `players/${key}`)); await remove(rp(code, `conns/${sid}`)); throw new Error(`Room already has ${R.MAX_PLAYERS} players. Join as spectator.`); }
     }
     onDisconnect(rp(code, `players/${key}/online`)).set(false);
@@ -127,11 +128,17 @@ export async function joinRoom(code, name, wantRole) {
   return { role, key, name: nm };
 }
 
-export async function leaveRoom(code, role, key) {
+// how = "drop": leaving a lobby that has not started, so the player's entry is removed (no ghost in the list). "gone": the entry was already removed (give up): only clean up the connection.
+// Anything else keeps the entry and marks it offline, so the player can come back to a running game.
+export async function leaveRoom(code, role, key, how) {
   try {
     await remove(rp(code, `conns/${sid}`));
     if (role === "spectator") await remove(rp(code, `spectators/${sid}`));
-    else if (role === "player") await update(rp(code, `players/${key}`), { online: false });
+    else if (role === "player") {
+      if (how === "drop" || how === "gone") { try { await onDisconnect(rp(code, `players/${key}/online`)).cancel(); } catch (e) { /* ignore */ } }   // otherwise the browser would re-create the entry as { online: false } when it disconnects
+      if (how === "drop") await remove(rp(code, `players/${key}`));
+      else if (how !== "gone") await update(rp(code, `players/${key}`), { online: false });
+    }
   } catch (e) { console.warn(e); }
 }
 
@@ -223,6 +230,7 @@ export async function pruneChat(code) {
 }
 
 export async function bumpStats(key, name, delta) {
+  if (String(key).startsWith("bot~")) return;   // bots never reach the leaderboard
   await runTransaction(ref(db, `stats/${key}`), (cur) => {
     const s = cur || { name, games_played: 0, fights_won: 0, fights_lost: 0, fights_drawn: 0, tournaments_won: 0, animals_drafted: 0 };
     s.name = name;

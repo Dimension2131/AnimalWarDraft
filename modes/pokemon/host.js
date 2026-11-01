@@ -85,7 +85,7 @@ export function createHost(ctx) {
       if (N.now() - B.overAt < MANUAL_END_MS) return;
       return finishFight(f, resultOf(st));
     }
-    const need = E.needsChoice(st), online = (k) => !!((S.players || {})[k] || {}).online, keys = [f.a, f.b];
+    const need = E.needsChoice(st), online = (k) => { const p = (S.players || {})[k] || {}; return !!p.online && !p.bot; }, keys = [f.a, f.b];
     const chs = ((B.ch || {})[B.n]) || {}, got = [0, 1].map((si) => (need[si] ? (chs[si === 0 ? "a" : "b"] || null) : null));
     const late = N.now() >= B.dl;
     const ready = [0, 1].every((si) => !need[si] || got[si] || late || !online(keys[si]));

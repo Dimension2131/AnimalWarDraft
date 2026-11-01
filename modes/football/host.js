@@ -84,7 +84,7 @@ export function createHost(ctx) {
       if (!cache[f.id]) cache[f.id] = planOf(map, T, f, [nm(f.a), nm(f.b)]);
       const plan = cache[f.id];
       // the match ends at its natural end, or as soon as both managers have skipped to full time (an offline manager does not hold it up). The skip flag lives in the manager's own lineups node: lineups/<key>/skip = "<fight id>:<fight seed>".
-      const token = `${f.id}:${f.seed}`, done = (k) => ((S.lineups || {})[k] || {}).skip === token || !((S.players || {})[k] || {}).online;   // the token holds the match's own random seed: a skip left over from an earlier tournament ("Play again, same team" keeps the lineups) can never match a new match with the same id
+      const token = `${f.id}:${f.seed}`, done = (k) => ((S.lineups || {})[k] || {}).skip === token || !((S.players || {})[k] || {}).online || !!((S.players || {})[k] || {}).bot;   // the token holds the match's own random seed: a skip left over from an earlier tournament ("Play again, same team" keeps the lineups) can never match a new match with the same id
       if (N.now() >= f.startAt + endMs(plan.M) || (N.now() >= f.startAt && plan.M.animated && done(f.a) && done(f.b))) return finishFight(f, plan);
     }
   }

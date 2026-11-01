@@ -12,6 +12,7 @@ import { simulate, validateAnimals, balanceTest } from "./sim.js";
 import * as FBC from "../modes/football/card.js";
 import * as BBC from "../modes/basketball/card.js";
 import { preload, failed, cardImage } from "./preload.js";
+import { createBotsPanel } from "./bots-ui.js";
 
 const $ = (s, r = document) => r.querySelector(s);
 // DOM replaceChildren() turns null/undefined/false into the TEXT "null": every call goes through rc(), which drops them (like h() does).
@@ -169,13 +170,38 @@ async function main() {
     startWatching(code); $("#chat").hidden = false; schedule();
     if (r.role !== role) toast("The game is already running, so you joined as a spectator.");
   }
-  async function leave() {
+  // how: "drop" = leaving a lobby that has not started (the player's entry is removed); "gone" = the player gave up and was already removed; nothing = keep the seat (offline)
+  async function leave(how) {
     unlistNow();
     if (runner) { runner.stop(); runner = null; }
-    if (S.code) await N.leaveRoom(S.code, S.role, S.key);
+    if (S.code) await N.leaveRoom(S.code, S.role, S.key, how);
     stopWatching(); sessionStorage.removeItem("adw_room"); ctxKey = "";
     P.getPack(homePack).then((p) => P.applyPack(p, { animate: true }));
     Object.assign(S, { code: null, role: null, key: null, view: "home" }); $("#chat").hidden = true; $("#banner").hidden = true; schedule();
+  }
+
+  // The top bar's Leave button. In a lobby that has not started, leaving removes you from the list. In a running game it asks first: keep your seat, or give up for good.
+  function leaveClick() {
+    const m = S.meta || {};
+    if (S.role === "player" && m.started && !["lobby", "results", "ended"].includes(m.phase)) return leaveSheet();
+    leave(S.role === "player" && m.phase === "lobby" && !m.started ? "drop" : undefined);
+  }
+  function leaveSheet() {
+    if ($("#leaveSheet")) return;
+    const prev = document.activeElement, close = () => { sheet.remove(); document.removeEventListener("keydown", onKey, true); if (prev && prev.focus) prev.focus({ preventScroll: true }); };
+    const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
+    const opt = (title, text, fn, cls) => h("button", { type: "button", class: "ls-opt" + (cls ? " " + cls : ""), onclick: fn }, h("b", {}, title), h("span", {}, text));
+    const sheet = h("div", { id: "leaveSheet", role: "dialog", "aria-modal": "true", "aria-labelledby": "lsTitle", onclick: (e) => { if (e.target === sheet) close(); } },
+      h("div", { class: "ls-card" }, h("h3", { id: "lsTitle" }, "Leave the game?"),
+        opt("Keep playing", "Stay in the game.", close),
+        opt("Leave for now", "Your seat is kept. Come back with the same name and the room code.", () => { close(); leave(); }),
+        opt("Give up", S.meta.phase === "draft" ? `You are out for good. Your ${PK.nouns.plural} go back into the pool to be bid on again.` : "You are out for good. Your team plays on by itself without you.", async () => {
+          close();
+          try { await H.giveUp(S.code, S.key); } catch (e) { toast(e.message || "Could not give up."); return; }
+          await leave("gone");
+        }, "danger")));
+    document.body.append(sheet); document.addEventListener("keydown", onKey, true);
+    const first = sheet.querySelector(".ls-opt"); if (first) first.focus({ preventScroll: true });
   }
 
   function ensureRunner() {
@@ -207,7 +233,7 @@ async function main() {
     rc(tb);
     if (S.code) {
       tb.append(h("span", { class: "brand" }, PK.title), h("span", { class: "code" }, S.code), h("span", { class: "who" }, S.role === "spectator" ? "spectating" : S.name), ...(isHost() ? [h("span", { class: "pill host" }, "host")] : []),
-        h("span", { class: S.connected ? "dot on" : "dot" }), h("span", { class: "tb-gap", "aria-hidden": "true" }), h("button", { class: "btn small", onclick: leave }, "Leave"));
+        h("span", { class: S.connected ? "dot on" : "dot" }), h("span", { class: "tb-gap", "aria-hidden": "true" }), h("button", { class: "btn small", onclick: leaveClick }, "Leave"));
     }
     const taken = S.role === "player" && S.loaded.players && S.players && S.players[S.key] && S.players[S.key].sid && S.players[S.key].sid !== N.sid;
     let msg = "";
@@ -236,6 +262,7 @@ async function main() {
     if (!S.loaded.meta) return mount("loading");
     if (!S.meta) { toast("That room no longer exists."); leave(); return; }
     if (ctxKey !== want()) { ensureCtx(); return mount("loading"); }
+    if (S.meta.phase === "ended") return mount("ended", "ended", screens.ended);
     const f = MD.phases.includes(S.meta.phase) ? modeScreen(S.meta.phase) : null;
     if (f) mount(S.meta.phase, `${MD.id}:${S.meta.phase}`, f); else mount("loading");
   }
@@ -453,11 +480,14 @@ async function main() {
       selMode.value = MD.id; selMode.disabled = !host;
       cbMystery.checked = !!L.mysteryTraits; cbMystery.disabled = !host;
       modePanel.refresh(L, host);
+      botsPanel.refresh(L, host, draftMode);
       widgets.forEach((w) => w.refresh(f, host));
       const n = H.filterPool(ENT.list, f, PK).length, np = Object.keys(S.players || {}).length, need = MD.noDraft ? 1 : H.minPool(Math.max(np, 2), L.rosterSize), ok = n >= need;
       poolInfo.className = "poolinfo " + (ok ? "ok" : "bad"); poolInfo.textContent = MD.noDraft ? `Pool: ${n} ${PK.nouns.plural}` : `Pool: ${n} ${PK.nouns.plural} (need at least ${need} for ${Math.max(np, 2)} players × ${L.rosterSize} + ${R.POOL_MARGIN})`;
       startBtn.hidden = !host; startBtn.disabled = !(host && runner && ok && np >= 2);
     }
+    const draftMode = (MD.phases || []).includes("draft") && !MD.noDraft;   // bots only play in draft games
+    const botsPanel = createBotsPanel({ h, N, R, state: () => ({ code: S.code, players: S.players }), isHost }); botsPanel.wire({ edit });
     const rosRange = MD.rosterRange || { min: R.ROSTER_MIN, max: R.ROSTER_MAX };
     const rosLabel = h("label", {}, `${P.cap(rn())} size (${rosRange.min ?? R.ROSTER_MIN}-${rosRange.max ?? R.ROSTER_MAX})`, inRos);
     rosLabel.hidden = !!MD.hideRosterBox;   // football: the Bench box in its own panel sets the squad size (11 + bench)
@@ -470,6 +500,7 @@ async function main() {
         h("label", {}, "Mode", selMode), modeDesc,
         draftBox,
         ...modePanel.nodes),
+      botsPanel.node,
       h("div", { class: "card" }, h("h3", {}, `${P.cap(PK.nouns.singular)} pool`), ...widgets.flatMap((w) => w.nodes), poolInfo),
       startBtn, h("p", { class: "muted center small" }, "Waiting for the host to start…"));
     drawEx(); refresh();
@@ -477,11 +508,31 @@ async function main() {
       update() {
         if (!pending) { const fresh = settings(); if (JSON.stringify(fresh) !== JSON.stringify(L)) { L = fresh; drawEx(); } }
         refresh();
-        rc(plist, ...playersSorted().map((p) => h("div", { class: "row between" }, h("span", {}, h("span", { class: "dot " + (p.online ? "on" : "") }), ` ${p.name}`, S.host && S.host.key === p.key ? h("span", { class: "pill host" }, "host") : null),
+        rc(plist, ...playersSorted().map((p) => h("div", { class: "row between" }, h("span", {}, h("span", { class: "dot " + (p.online ? "on" : "") }), ` ${p.bot ? (p.bot.emoji || "🤖") + " " : ""}${p.name} `, p.bot ? h("span", { class: "pill bot" }, "bot") : null, S.host && S.host.key === p.key ? h("span", { class: "pill host" }, "host") : null),
           isHost() && !p.online ? h("button", { class: "btn small", onclick: () => N.del(S.code, `players/${p.key}`) }, "Remove") : null)));
         specInfo.textContent = `${Object.keys(S.spectators || {}).length} spectator(s) watching`;
       }
     };
+  };
+
+  // ================= GAME ENDED (everyone else gave up) =================
+  screens.ended = () => {
+    const E = (S.meta && S.meta.ended) || {};
+    const forfeit = E.reason === "forfeit" && E.winnerName;
+    const back = h("button", { class: "btn primary", onclick: async () => {
+      try {
+        for (const [k, p] of Object.entries(S.players || {})) if (p && p.gaveUp) await N.del(S.code, `players/${k}`);
+        await N.patch(S.code, "", { "meta/phase": "lobby", "meta/started": false, "meta/ended": null, "meta/gaveUp": null, game: null, ledger: null, auction: null, lineups: null, tour: null, appeals: null, pkb: null, fights: null });
+      } catch (e) { toast(e.message); }
+    } }, "Back to the lobby");
+    screen(h("div", { class: "card ended-card" },
+      h("div", { class: "ended-icon", "aria-hidden": "true" }, forfeit ? "🏳️" : "🚪"),
+      h("h2", {}, "Game ended"),
+      forfeit ? h("p", {}, `${E.by || "A player"} gave up.`) : h("p", {}, "Nobody is left to play."),
+      forfeit ? h("div", { class: "ended-who" }, `${E.winnerName} wins by forfeit`) : null,
+      h("p", { class: "muted small" }, forfeit ? "The game stopped early, so there is no results table." : "No participants remain, so there are no results."),
+      h("div", { class: "ended-btns" }, back, h("button", { class: "btn", onclick: () => leave() }, "Leave room"))));
+    return { update() { back.hidden = !isHost(); } };
   };
 
   // ================= DRAFT =================
@@ -555,6 +606,7 @@ async function main() {
         const rows = (G.keys ? arr(G.keys) : []).map((k) => {
           const tags = []; if (A && active) { if (A.top && A.top.key === k) tags.push("top"); if (A.skips && A.skips[k]) tags.push("skipped"); if (A.participants && !A.participants[k]) tags.push("full"); if (A.participants && A.participants[k] && !(A.eligible && A.eligible[k])) tags.push("broke"); }
           if (S.players && S.players[k] && !S.players[k].online) tags.push("offline");
+          if (S.players && S.players[k] && S.players[k].bot) tags.push("bot");
           return { k, name: nameOf(k), you: k === me, bal: bal[k] ?? 0, n: arr(ros[k]).length, tags };
         });
         if (changed(tbl, [rows, st.rosterSize, PK.nouns.plural]))
