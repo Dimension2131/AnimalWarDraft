@@ -1,0 +1,25 @@
+/* styles/fx-centre.css: the Display button (pause / battery options) and its floating panel (js/fx-centre.js). The background itself is js/pxbg.js, which reads the same settings.
+   The button's FIXED POSITION is set in styles/worlds/pixel-bg.css and js/pxbg.js (dock), next to the music, eye and light/dark buttons. */
+
+#fxBtn { width: 44px; height: 44px; padding: 0; cursor: pointer; border: 2px solid var(--edge-dim); border-radius: var(--w-radius); background: var(--sheet) url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAKklEQVR42mNgGPKAEZnz6cWG/8h8PokARnziDAwMDEyUumDUgFEDhgkAALKECBS69550AAAAAElFTkSuQmCC) center / 28px 28px no-repeat; image-rendering: pixelated }
+#fxBtn:hover { background-color: var(--w-hover) }
+#fxBtn[aria-expanded="true"] { border-color: var(--teal) }
+#fxBtn.is-frozen { background-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAS0lEQVR42mNgGHTg04sN/0lRz0SpIUz4XEKMQUyUeomJ2HDBZRATqQGMbhATpbHGQopiPokARrIMwKaRaC/g04zXBYQ0Ui0pDzwAAHr/JVFmSc8DAAAAAElFTkSuQmCC); border-color: var(--yellow) }
+:root[data-theme="light"] #fxBtn { background-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAKklEQVR42mNgGPKAEZmjpSjyH5l/7f4bRnziDAwMDEyUumDUgFEDhgkAAG0kCBTxx3w8AAAAAElFTkSuQmCC) }
+:root[data-theme="light"] #fxBtn.is-frozen { background-image: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAS0lEQVR42mNgGHRAS1HkPynqmSg1hAmfS4gxiIlSLzERGy64DGIiNYDRDWKiNNZYSFF87f4bRrIMwKaRaC/g04zXBYQ0Ui0pDzwAAGdTGE/Mp1ScAAAAAElFTkSuQmCC) }
+#fxBtn:focus-visible { outline: 3px solid var(--teal); outline-offset: 2px }
+
+/* ---------- the panel (re-uses the Music Centre's switch, chip, head and row styles from styles/music-centre.css) ---------- */
+#fxPanel { position: fixed; top: 60px; right: 10px; z-index: 58; width: min(340px, calc(100vw - 16px)); max-height: calc(100dvh - 76px); display: flex; flex-direction: column; overflow: hidden;
+  background: var(--sheet); color: var(--text); border: 2px solid var(--edge-dim); border-radius: var(--w-radius); box-shadow: var(--offset); font: 400 .92rem/1.35 var(--body) }
+#fxPanel[hidden] { display: none }
+#fxPanel .fx-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: grid; gap: 12px; padding: 6px 12px 12px }
+#fxPanel .fx-block { display: grid; gap: 6px; min-width: 0 }
+#fxPanel .fx-seg { display: flex; flex-wrap: wrap; gap: 6px }
+#fxPanel .mc-note { margin: 0 }
+#fxPanel .fx-status { margin: 0; padding-top: 10px; border-top: 2px solid var(--rule); color: var(--muted); font-size: .78rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase }
+#fxPanel .mc-lbl { width: auto; flex: 1 }
+
+/* optional live frame-rate readout */
+#fxMeter { position: fixed; left: 8px; bottom: calc(52px + env(safe-area-inset-bottom)); z-index: 55; padding: 3px 8px; font: 800 .75rem var(--body); font-variant-numeric: tabular-nums; letter-spacing: .04em; color: var(--text); background: var(--sheet); border: 2px solid var(--edge-dim); border-radius: var(--w-radius); pointer-events: none }
+#fxMeter[hidden] { display: none }
