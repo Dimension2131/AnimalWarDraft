@@ -32,15 +32,17 @@ export const toAbs = (s, d, y) => (s === 0 ? [d, y] : [1 - d, 1 - y]);   // team
 export const toTeam = (s, x, y) => (s === 0 ? [x, y] : [1 - x, 1 - y]);
 const DEPTH = { GK: 0.035, DEF: 0.2, MID: 0.43, FWD: 0.63 };
 const latOf = (j, n, line) => { if (n === 1) return 0.5; if (n === 2) return j ? 0.65 : 0.35; const [lo, hi] = n >= 4 || (n === 3 && line === "FWD") ? [0.1, 0.9] : [0.22, 0.78]; return lo + ((hi - lo) * j) / (n - 1); };
-export function baseLayout(formation) {   // one entry per slot, in slotsOf order (slot 0 = keeper); LB/LM/LW get the small y (their left)
-  const sl = E.slotsOf(formation), cnt = {}, seen = {};
-  sl.forEach((s) => { cnt[s.line] = (cnt[s.line] || 0) + 1; });
-  return sl.map((s) => { const j = (seen[s.line] = (seen[s.line] === undefined ? -1 : seen[s.line]) + 1); return { i: s.i, line: s.line, code: s.code, d: DEPTH[s.line], y: latOf(j, cnt[s.line], s.line) }; });
+// A slot code can stand a little in front of or behind its line: a CDM shields the back line, a CAM plays between the lines, a wing-back pushes up beside the midfield, a CF drops off the striker.
+const DOFF = { LWB: 0.09, RWB: 0.09, CDM: -0.1, CAM: 0.08, CF: -0.07 };
+export function baseLayout(formation) {   // one entry per slot, in slotsOf order (slot 0 = keeper); LB/LM/LW get the small y (their left). Sideways spots spread each ROW of the formation (or follow the row's own list).
+  return E.slotsOf(formation).map((s) => ({ i: s.i, line: s.line, code: s.code, d: clamp(DEPTH[s.line] + (DOFF[s.code] || 0), 0.03, 0.9), y: s.y != null ? s.y : latOf(s.col, s.n, s.line) }));
 }
 const K = { GK: 0.04, DEF: 0.55, MID: 0.85, FWD: 0.95 };
+const RUN = { LWB: 0.5, RWB: 0.5, CDM: 0.35, CAM: 0.75 };   // how readily a slot runs into space (overlapping wing-backs, a CAM arriving late), where its code differs from its line
+const KC = { CDM: 0.7, LWB: 0.8, RWB: 0.8, CAM: 0.9, CF: 0.95 };   // how far a slot follows the ball up and down the pitch, where its code differs from its line
 // Where slot i of team s should stand when the ball is at `ball` and `poss` has it: the formation shape, pushed up or back with the ball and leaning towards its side. flip = second half (teams have changed ends).
 export function restPos(B, s, i, ball, poss, flip) {
-  const g = flip ? 1 - s : s, b = B[s][i], [bd, by] = toTeam(g, clamp(ball[0], 0, 1), clamp(ball[1], 0, 1)), k = K[b.line];
+  const g = flip ? 1 - s : s, b = B[s][i], [bd, by] = toTeam(g, clamp(ball[0], 0, 1), clamp(ball[1], 0, 1)), k = KC[b.code] != null ? KC[b.code] : K[b.line];
   let d = b.d + (bd - 0.5) * 0.42 * k + (poss === s ? 0.06 : -0.04) * k;
   d = b.line === "GK" ? clamp(d, 0.02, 0.09) : clamp(d, 0.07, 0.95);
   return toAbs(g, d, clamp(b.y + (by - b.y) * (b.line === "GK" ? 0.3 : 0.22), 0.03, 0.97));
@@ -127,7 +129,7 @@ export function buildMatch({ teams, sim, seed, speed, pens }) {
         adv: gk ? 0 : clamp((sho + dri - 2 * def) / 500, -0.07, 0.07) + (h(2) - 0.5) * 0.03, persD: (gk ? 0.2 : 1) * (h(3) - 0.5) * 0.04, persY: (gk ? 0.2 : 1) * (h(4) - 0.5) * 0.09,
         rove: gk ? 0.3 : 0.6 + ((dri + pas) / 200) * 1.8 * (line === "DEF" ? 0.7 : 1) + h(5) * 0.9, lag: 2 + Math.floor(h(6) * 8), prs: 0.25 + (def / 100) * 0.4 + h(7) * 0.15, prsR: 16 + h(8) * 14, sup: 0.5 + h(11) * 1.0,
         kScale: 0.82 + h(9) * 0.36, per: 1100 + h(10) * 1700, ph: phaseOf(id), carry: 4.4 + (dri / 100) * 2, shield: 2 + (dri / 100) * 1.6, jog: 4.2 + h(12) * 2.0, mark: 0.08 + (def / 100) * 0.2 + h(13) * 0.06,
-        runner: (line === "FWD" ? 1 : line === "MID" ? 0.6 : line === "DEF" ? 0.18 : 0) * clamp((pac + sho + dri) / 240, 0.4, 1.1)
+        runner: (RUN[B[s][i].code] != null ? RUN[B[s][i].code] : line === "FWD" ? 1 : line === "MID" ? 0.6 : line === "DEF" ? 0.18 : 0) * clamp((pac + sho + dri) / 240, 0.4, 1.1)
       };
       traitCache.set(id + ":" + i, t); return t;
     };

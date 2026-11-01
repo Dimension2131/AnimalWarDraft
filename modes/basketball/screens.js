@@ -146,7 +146,9 @@ export default function createScreens(ctx) {
     screen(head, h("div", { class: "card" }, stage), side);
     const planFor = (T, f) => (plans[f.id] ||= planOf(ctx.entities.map, T, f, [nameOf(f.a), nameOf(f.b)], f.speed));
     const speedPill = (f) => `${(P.SPEEDS[P.normSpeed(f.speed)] || P.SPEEDS.quick).label}${f.inj ? " · injuries on" : ""}`;
-    const fiveList = (T, k) => { const ids = arr(T.lineups[k]).slice(0, E.STARTERS).map(ent), tac = E.normTactics((T.tactics || {})[k]); return h("div", { class: "bb-five" }, h("b", {}, `${nameOf(k)} · ${tac.pace} pace · ${tac.focus}`), ...ids.map((p) => h("span", {}, `${p.pos} ${p.name} (${p.ovr})`))); };
+    const fiveList = (T, k) => { const ids = arr(T.lineups[k]).slice(0, E.STARTERS).map(ent), tac = E.normTactics((T.tactics || {})[k]); return h("div", { class: "bb-five" }, h("b", {}, `${nameOf(k)} · ${tac.pace} pace · ${tac.focus}`), ...ids.map((p) => h("span", {}, ctx.withInfo(`${p.pos} ${p.name} (${p.ovr})`, p)))); };
+    // under the live film: both fives with an "i" each (the film is a canvas, so there is nothing to tap on it)
+    const playersBox = (T, f) => h("details", { class: "bb-players" }, h("summary", {}, "Players"), h("div", { class: "row between" }, fiveList(T, f.a), fiveList(T, f.b)));
     function compareView(T, f) {
       const teams = [f.a, f.b].map((k) => { const pl = arr(T.lineups[k]).map(ent); return { xi: pl.slice(0, E.STARTERS), bench: pl.slice(E.STARTERS), mode: E.normPosMode(T.posMode) }; });
       const c = E.compare(teams[0], teams[1]);
@@ -210,7 +212,7 @@ export default function createScreens(ctx) {
         if (!force && cmpDone === key) return;
         cmpDone = key;
         if (pre) rc(stage, h("div", { class: "bb-row-vs" }, h("b", {}, names[0]), h("span", { class: "muted" }, "vs"), h("b", {}, names[1]), h("span", { class: "pill" }, speedPill(f))), h("h4", { class: "center" }, "Team comparison"), compareView(T, f), h("div", { class: "row between" }, fiveList(T, f.a), fiveList(T, f.b)), h("p", { class: "muted center", "data-tip": "1" }));
-        else rc(stage, live.el);
+        else rc(stage, live.el, playersBox(T, f));
       },
       tick() {
         const T = S.tour, now = N.now(); if (!T || T.state !== "playing" || !plan) return;

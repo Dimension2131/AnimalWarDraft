@@ -2,27 +2,57 @@
 // One seeded simulation per fixture: "quick result" and "watch" show the same outcome because every device re-runs the same events.
 import { mulberry32 } from "../../js/sim.js";
 
-export const FORMATIONS = {
-  "4-3-3": { label: "4-3-3", slots: [["GK", "GK"], ["DEF", "LB"], ["DEF", "CB"], ["DEF", "CB"], ["DEF", "RB"], ["MID", "CM"], ["MID", "CM"], ["MID", "CM"], ["FWD", "LW"], ["FWD", "ST"], ["FWD", "RW"]] },
-  "4-4-2": { label: "4-4-2", slots: [["GK", "GK"], ["DEF", "LB"], ["DEF", "CB"], ["DEF", "CB"], ["DEF", "RB"], ["MID", "LM"], ["MID", "CM"], ["MID", "CM"], ["MID", "RM"], ["FWD", "ST"], ["FWD", "ST"]] },
-  "3-5-2": { label: "3-5-2", slots: [["GK", "GK"], ["DEF", "CB"], ["DEF", "CB"], ["DEF", "CB"], ["MID", "LM"], ["MID", "CM"], ["MID", "CM"], ["MID", "CM"], ["MID", "RM"], ["FWD", "ST"], ["FWD", "ST"]] }
+// Slot codes and the line each one belongs to. A formation is its ROWS, back to front, left to right ("LB CB CB RB"): the rows are what the line-up screen draws, and together with the codes
+// they decide where the match viewer stands everyone (choreo.baseLayout). A row can carry its own sideways spots (second item) when the default spread would look wrong.
+const CODE_LINE = { GK: "GK", LB: "DEF", CB: "DEF", RB: "DEF", LWB: "DEF", RWB: "DEF", CDM: "MID", CM: "MID", CAM: "MID", LM: "MID", RM: "MID", LW: "FWD", ST: "FWD", CF: "FWD", RW: "FWD" };
+export const FORMATIONS = {};
+const addFormation = (id, group, ...rows) => {
+  const all = [["GK"]].concat(rows.map((r) => (typeof r === "string" ? [r] : r))), slots = [];
+  all.forEach(([codes, ys], row) => { const cs = codes.split(" "); cs.forEach((code, col) => slots.push({ line: CODE_LINE[code], code, row, col, n: cs.length, y: ys ? ys[col] : null })); });
+  FORMATIONS[id] = { label: id, group, rows: all.map((r) => r[0]), slots };
 };
+const B4 = "Back four", B3 = "Back three", B5 = "Back five";
+addFormation("4-3-3", B4, "LB CB CB RB", "CM CM CM", "LW ST RW");
+addFormation("4-4-2", B4, "LB CB CB RB", "LM CM CM RM", "ST ST");
+addFormation("3-5-2", B3, "CB CB CB", "LM CM CM CM RM", "ST ST");
+addFormation("4-2-3-1", B4, "LB CB CB RB", "CDM CDM", ["LM CAM RM", [0.14, 0.5, 0.86]], "ST");
+addFormation("4-1-4-1", B4, "LB CB CB RB", "CDM", "LM CM CM RM", "ST");
+addFormation("4-5-1", B4, "LB CB CB RB", "LM CM CAM CM RM", "ST");
+addFormation("4-3-2-1", B4, "LB CB CB RB", ["CM CM CM", [0.15, 0.5, 0.85]], ["CAM CAM", [0.3, 0.7]], "ST");
+addFormation("4-4-1-1", B4, "LB CB CB RB", "LM CM CM RM", ["CF", [0.33]], "ST");
+addFormation("4-2-2-2", B4, "LB CB CB RB", "CDM CDM", ["CAM CAM", [0.27, 0.73]], "ST ST");
+addFormation("4-1-2-1-2", B4, "LB CB CB RB", "CDM", ["CM CM", [0.3, 0.7]], "CAM", "ST ST");
+addFormation("4-3-1-2", B4, "LB CB CB RB", "CM CM CM", "CAM", "ST ST");
+addFormation("4-1-2-3", B4, "LB CB CB RB", "CDM", ["CM CM", [0.3, 0.7]], "LW ST RW");
+addFormation("3-4-3", B3, "CB CB CB", "LM CM CM RM", "LW ST RW");
+addFormation("3-4-1-2", B3, "CB CB CB", "LM CM CM RM", "CAM", "ST ST");
+addFormation("3-4-2-1", B3, "CB CB CB", "LM CM CM RM", ["CAM CAM", [0.25, 0.75]], "ST");
+addFormation("3-1-4-2", B3, "CB CB CB", "CDM", "LM CM CM RM", "ST ST");
+addFormation("5-3-2", B5, "LWB CB CB CB RWB", "CM CM CM", "ST ST");
+addFormation("5-4-1", B5, "LWB CB CB CB RWB", "LM CM CM RM", "ST");
+addFormation("5-2-1-2", B5, "LWB CB CB CB RWB", ["CM CM", [0.32, 0.68]], "CAM", "ST ST");
+addFormation("5-2-3", B5, "LWB CB CB CB RWB", ["CM CM", [0.35, 0.65]], "LW ST RW");
 export const FORMATION_IDS = Object.keys(FORMATIONS);
 export const XI = 11, BENCH_MAX = 7;
 export const DEFAULT_FORMATION = "4-3-3";
 export const normFormation = (f) => (FORMATIONS[f] ? f : DEFAULT_FORMATION);
-export const slotsOf = (f) => FORMATIONS[normFormation(f)].slots.map(([line, code], i) => ({ i, line, code }));
+const SLOT_CACHE = {};
+export const slotsOf = (f) => { const id = normFormation(f); return SLOT_CACHE[id] || (SLOT_CACHE[id] = FORMATIONS[id].slots.map((s, i) => ({ i, ...s }))); };
 
 const LINE = { goalkeeper: "GK", defender: "DEF", midfielder: "MID", forward: "FWD" };
 const LINE_ORD = { GK: 0, DEF: 1, MID: 2, FWD: 3 };
 export const lineOf = (p) => LINE[p.position] || "MID";
 
-// How well a player fits a slot: 1 = natural spot, 0.95 same line, 0.85 / 0.72 one / two lines away, 0.35 a keeper outfield or an outfielder in goal.
+// How well a player fits a slot: 1 = a position he is listed at (even one that belongs to another line), 0.97 = a close relative of the slot (a left-back at left wing-back, a CM at CDM...),
+// 0.95 same line, 0.85 / 0.72 one / two lines away, 0.35 a keeper outfield or an outfielder in goal.
+const KIN = { LB: ["LWB"], RB: ["RWB"], LWB: ["LB", "LM"], RWB: ["RB", "RM"], CDM: ["CM"], CM: ["CDM", "CAM"], CAM: ["CM", "CF"], LM: ["LW", "LWB"], RM: ["RW", "RWB"], LW: ["LM"], RW: ["RM"], ST: ["CF"], CF: ["ST", "CAM"] };
 export function fit(p, slot) {
   if (!p) return 0;
-  const pl = lineOf(p);
-  if (pl === slot.line) return (p.positions || [p.pos]).includes(slot.code) ? 1 : 0.95;
-  if (pl === "GK" || slot.line === "GK") return 0.35;
+  const pl = lineOf(p), pos = p.positions || [p.pos];
+  if (pl === "GK" || slot.line === "GK") return pl === slot.line ? 1 : 0.35;
+  if (pos.includes(slot.code)) return 1;
+  if ((KIN[slot.code] || []).some((c) => pos.includes(c))) return 0.97;
+  if (pl === slot.line) return 0.95;
   return Math.abs(LINE_ORD[pl] - LINE_ORD[slot.line]) === 1 ? 0.85 : 0.72;
 }
 export const isKeeper = (p) => !!p && p.position === "goalkeeper";
@@ -32,10 +62,30 @@ const outfield = (p) => (isKeeper(p) ? { pac: S(p, "spd") * 0.7, sho: 25, pas: S
 const gkRating = (p) => (isKeeper(p) ? (S(p, "div") + S(p, "han") + S(p, "ref") + S(p, "gkp") * 0.8 + S(p, "kic") * 0.2) / 3.99 : 25);
 
 // ---------- line-up helpers ----------
-// Best assignment of a set of players to the slots of a formation (greedy by "value above the field", then fixes duplicates). Returns an array of 11 ids.
+// Value of a player in a slot (used by the line-up helpers): overall x fit, a little extra for a player in his own line.
+const slotValue = (p, sl) => (p.ovr || 50) * fit(p, sl) + (lineOf(p) === sl.line ? 3 : 0);
+// The best pairing of n slots with m >= n players (Hungarian algorithm, O(n^2 m)): the sum of slotValue is as high as it can be, so a natural CDM or wing-back is never wasted on the wrong slot.
+function assign(slots, players) {
+  const n = slots.length, m = players.length, INF = 1e18;
+  const u = new Array(n + 1).fill(0), v = new Array(m + 1).fill(0), pm = new Array(m + 1).fill(0), way = new Array(m + 1).fill(0);
+  for (let i = 1; i <= n; i++) {
+    pm[0] = i; let j0 = 0; const minv = new Array(m + 1).fill(INF), used = new Array(m + 1).fill(false);
+    do {
+      used[j0] = true; const i0 = pm[j0]; let delta = INF, j1 = 0;
+      for (let j = 1; j <= m; j++) if (!used[j]) { const cur = -slotValue(players[j - 1], slots[i0 - 1]) - u[i0] - v[j]; if (cur < minv[j]) { minv[j] = cur; way[j] = j0; } if (minv[j] < delta) { delta = minv[j]; j1 = j; } }
+      for (let j = 0; j <= m; j++) { if (used[j]) { u[pm[j]] += delta; v[j] -= delta; } else minv[j] -= delta; }
+      j0 = j1;
+    } while (pm[j0] !== 0);
+    do { const j1 = way[j0]; pm[j0] = pm[j1]; j0 = j1; } while (j0);
+  }
+  const out = new Array(n).fill(null); for (let j = 1; j <= m; j++) if (pm[j]) out[pm[j] - 1] = players[j - 1]; return out;
+}
+// Best assignment of a set of players to the slots of a formation. Returns an array with one player per slot (null for a slot nobody can fill).
 export function arrange(players, formation) {
-  const slots = slotsOf(formation), left = players.slice(), out = new Array(slots.length).fill(null);
-  const order = slots.slice().sort((a, b) => (a.line === "GK" ? -1 : b.line === "GK" ? 1 : 0));   // the keeper slot first, it is the most position-bound
+  const slots = slotsOf(formation);
+  if (players.length >= slots.length) return assign(slots, players);
+  const left = players.slice(), out = new Array(slots.length).fill(null);   // fewer players than slots: greedy, the keeper slot first
+  const order = slots.slice().sort((a, b) => (a.line === "GK" ? -1 : b.line === "GK" ? 1 : 0));
   for (const sl of order) {
     let best = -1, bs = -1;
     left.forEach((p, i) => { const sc = (p.ovr || 50) * fit(p, sl); if (sc > bs) { bs = sc; best = i; } });
@@ -45,11 +95,15 @@ export function arrange(players, formation) {
 }
 // Starting XI = the best 11 for the formation out of the whole squad; the rest, strongest first, form the bench. Returns ids: first 11 in slot order, then the bench.
 export function autoLineup(squad, formation) {
-  const slots = slotsOf(formation), left = squad.slice(), xi = new Array(slots.length).fill(null);
-  const need = { GK: 1, DEF: 0, MID: 0, FWD: 0 }; slots.forEach((s) => { need[s.line]++; });
+  const slots = slotsOf(formation);
+  if (squad.length >= slots.length) {
+    const xi = assign(slots, squad), used = new Set(xi.map((p) => p.id)), bench = squad.filter((p) => !used.has(p.id)).sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
+    return xi.concat(bench).map((p) => p.id);
+  }
+  const left = squad.slice(), xi = new Array(slots.length).fill(null);
   const pick = (sl) => {
     let best = -1, bs = -1;
-    left.forEach((p, i) => { const sc = (p.ovr || 50) * fit(p, sl) + (lineOf(p) === sl.line ? 3 : 0); if (sc > bs) { bs = sc; best = i; } });
+    left.forEach((p, i) => { const sc = slotValue(p, sl); if (sc > bs) { bs = sc; best = i; } });
     return best >= 0 ? left.splice(best, 1)[0] : null;
   };
   const order = slots.filter((s) => s.i < Math.max(1, squad.length)).sort((a, b) => (a.line === "GK" ? -1 : b.line === "GK" ? 1 : 0));   // a squad smaller than 11 fills the first slots, so empty slots trail
@@ -74,6 +128,25 @@ export function chemistry(xi) {
   for (const v of [...Object.values(nat), ...Object.values(club)]) if (v >= 2) pts += v - 1;
   return Math.min(6, pts);   // at most +2.4% on every rating
 }
+// Role of each slot code: how much its player counts in the team's attack / control / defence, relative to a plain player of his line (a CDM shields, a CAM creates, wing-backs overlap...).
+export const ROLE = { LB: [1.25, 1, 1], RB: [1.25, 1, 1], CB: [0.75, 0.9, 1.1], LWB: [1.7, 1.1, 0.9], RWB: [1.7, 1.1, 0.9], CDM: [0.6, 1.1, 1.25], CM: [1, 1, 1], CAM: [1.35, 1.2, 0.5], LM: [1.2, 0.9, 0.75], RM: [1.2, 0.9, 0.75], LW: [1.05, 0.9, 1], RW: [1.05, 0.9, 1], ST: [1.05, 0.8, 1], CF: [0.95, 1.4, 1.2] };
+// How often each slot code takes the shot (on top of the line's weight: forwards 5, midfielders 2.2, defenders 0.5)
+export const SHOOT = { CB: 0.9, LWB: 0.9, RWB: 0.9, CDM: 0.6, CAM: 1.25, LW: 0.95, RW: 0.95, ST: 1.1 };
+const NEUTRAL = [1, 1, 1];
+// Weight of a slot in the team's attack, control and defence: the weight of its line times the role of its code
+const slotW = (sl) => {
+  const rm = ROLE[sl.code] || NEUTRAL;
+  const wa = sl.line === "FWD" ? 1 : sl.line === "MID" ? 0.7 : 0.25, wc = sl.line === "MID" ? 1 : sl.line === "FWD" ? 0.5 : 0.5, wd = sl.line === "DEF" ? 1 : sl.line === "MID" ? 0.7 : 0.15;
+  return [wa * rm[0], wc * rm[1], wd * rm[2]];
+};
+// The SHAPE of a formation: how much attacking, controlling and defending weight its ten outfield slots carry, against the 4-3-3. Equal players in a back five defend more and attack less, in a 4-2-3-1 the opposite.
+const shapeSum = (f) => slotsOf(f).reduce((t, sl) => { if (sl.line === "GK") return t; const w = slotW(sl); return [t[0] + w[0], t[1] + w[1], t[2] + w[2]]; }, [0, 0, 0]);
+const SHAPE = {};
+const shapeOf = (f) => {
+  const id = normFormation(f);
+  if (!SHAPE[id]) { const x = shapeSum(id), r = shapeSum(DEFAULT_FORMATION), pf = (v, w, g, lim) => Math.max(1 - lim, Math.min(1 + lim, 1 + g * (v / w - 1))); SHAPE[id] = { att: pf(x[0], r[0], 0.4, 0.07), ctl: pf(x[1], r[1], 0.25, 0.05), def: pf(x[2], r[2], 0.4, 0.07) }; }
+  return SHAPE[id];
+};
 // xi: players in slot order; formation id; minute (fatigue after 60'); fresh: ids that came on as subs (no fatigue)
 export function ratings(xi, formation, { chem = false, minute = 0, fresh = new Set() } = {}) {
   const slots = slotsOf(formation);
@@ -81,7 +154,7 @@ export function ratings(xi, formation, { chem = false, minute = 0, fresh = new S
   const cm = chem ? 1 + chemistry(xi) * 0.004 : 1;
   xi.forEach((p, i) => {
     const sl = slots[i];
-    const wa = sl.line === "FWD" ? 1 : sl.line === "MID" ? 0.7 : 0.25, wc = sl.line === "MID" ? 1 : sl.line === "FWD" ? 0.5 : 0.5, wd = sl.line === "DEF" ? 1 : sl.line === "MID" ? 0.7 : 0.15;
+    const [wa, wc, wd] = slotW(sl);
     if (!p) { if (sl.line !== "GK") { acc.att.push(0); atkW += wa; acc.ctl.push(0); ctlW += wc; acc.def.push(0); defW += wd; } return; }   // an empty slot (squad smaller than 11) counts as a zero
     const f = fit(p, sl), o = outfield(p);
     const tired = minute > 60 && !fresh.has(p.id) ? 1 - (minute - 60) * 0.0016 * (1.4 - Math.min(1, S(p, "phy") / 100)) : 1;
@@ -93,7 +166,8 @@ export function ratings(xi, formation, { chem = false, minute = 0, fresh = new S
     acc.att.push(att * k * wa); atkW += wa; acc.ctl.push(ctl * k * wc); ctlW += wc; acc.def.push(def * k * wd); defW += wd;
   });
   const sum = (a) => a.reduce((x, y) => x + y, 0);
-  return { att: sum(acc.att) / (atkW || 1), ctl: sum(acc.ctl) / (ctlW || 1), def: sum(acc.def) / (defW || 1), gk, chem: chem ? chemistry(xi) : 0 };
+  const sh = shapeOf(formation);
+  return { att: (sum(acc.att) / (atkW || 1)) * sh.att, ctl: (sum(acc.ctl) / (ctlW || 1)) * sh.ctl, def: (sum(acc.def) / (defW || 1)) * sh.def, gk, chem: chem ? chemistry(xi) : 0 };
 }
 // The pre-match comparison (display only: the match itself is decided by the seeded simulation)
 export function compare(A, B) {
@@ -158,7 +232,7 @@ export function simulateMatch({ teams, seed, discipline = false }) {
     if (rng() > pShot) { if (rng() < 0.18) ev(m, "chance", { s, text: "block" }); continue; }
     // the shooter: a forward most often, then a midfielder, rarely a defender
     const slots = slotsOf(T[s].formation), cand = [];
-    T[s].xi.forEach((p, i) => { if (!p || slots[i].line === "GK") return; const w = slots[i].line === "FWD" ? 5 : slots[i].line === "MID" ? 2.2 : 0.5; cand.push({ p, w: w * Math.pow(Math.max(5, outfield(p).sho) / 70, 2.2) }); });
+    T[s].xi.forEach((p, i) => { if (!p || slots[i].line === "GK") return; const w = slots[i].line === "FWD" ? 5 : slots[i].line === "MID" ? 2.2 : 0.5; cand.push({ p, w: w * (SHOOT[slots[i].code] || 1) * Math.pow(Math.max(5, outfield(p).sho) / 70, 2.2) }); });
     let tw = cand.reduce((x, c) => x + c.w, 0), r = rng() * tw, shooter = cand[cand.length - 1].p;
     for (const c of cand) { r -= c.w; if (r <= 0) { shooter = c.p; break; } }
     const helpers = cand.filter((c) => c.p.id !== shooter.id).sort((a, b) => outfield(b.p).pas * (0.5 + rng()) - outfield(a.p).pas * (0.5 + rng())), assist = helpers.length && rng() < 0.7 ? helpers[0].p : null;

@@ -64,3 +64,17 @@
 .bb-face, .fb-face { display: grid; justify-items: center; gap: 2px; width: 100%; margin: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: inherit; touch-action: none; user-select: none; -webkit-user-select: none }
 .bb-face:focus-visible, .fb-face:focus-visible { outline: 3px solid var(--teal, #35e0c0); outline-offset: 2px }
 .bb-face img, .fb-face img { pointer-events: none }
+
+/* ---------- Pokémon: battle plate, switch buttons, results ---------- */
+.pk-info { flex: 1 0 auto; display: inline-flex; justify-content: flex-start; padding-left: 6px }
+.pk-bwrap { position: relative; display: grid }
+.pk-bwrap > .pk-bbtn { padding-right: 30px }
+.pk-bwrap > .info-i { position: absolute; right: 2px; top: 50%; transform: translateY(-50%); margin: 0 }
+.pk-lhead > .info-i { margin-left: 4px }
+.pk-rteam .info-wrap { align-items: flex-end }
+
+/* ---------- race lanes, "Players" lists under the live canvas matches ---------- */
+.rc-i { display: inline-flex }
+.fb-players, .bb-players { margin-top: 8px }
+.fb-players > summary, .bb-players > summary { cursor: pointer; padding: 6px 0; min-height: 32px; font: .85rem var(--display, inherit); letter-spacing: .08em; text-transform: uppercase }
+.fb-players .info-wrap, .bb-players .info-wrap { align-items: center }

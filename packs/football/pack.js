@@ -22,6 +22,16 @@ const GK_STATS = [
   { key: "gkp", label: "Positioning", abbr: "POS", description: "Reading the game and being in the right place." }
 ];
 
+// How many of each position a formation asks for: [DEF, MID, FWD] (plus one GK). Kept here because a pack file cannot import the engine; the test suite compares it with the engine.
+const FORMATION_NEEDS = {
+  "4-3-3": [4, 3, 3], "4-4-2": [4, 4, 2], "3-5-2": [3, 5, 2], "4-2-3-1": [4, 5, 1], "4-1-4-1": [4, 5, 1], "4-5-1": [4, 5, 1], "4-3-2-1": [4, 5, 1], "4-4-1-1": [4, 4, 2], "4-2-2-2": [4, 4, 2], "4-1-2-1-2": [4, 4, 2],
+  "4-3-1-2": [4, 4, 2], "4-1-2-3": [4, 3, 3], "3-4-3": [3, 4, 3], "3-4-1-2": [3, 5, 2], "3-4-2-1": [3, 6, 1], "3-1-4-2": [3, 5, 2], "5-3-2": [5, 3, 2], "5-4-1": [5, 4, 1], "5-2-1-2": [5, 3, 2], "5-2-3": [5, 2, 3]
+};
+const FORMATION_IDS = Object.keys(FORMATION_NEEDS);
+const needText = (id) => { const [d, m, f] = FORMATION_NEEDS[id]; return `1 GK, ${d} DEF, ${m} MID, ${f} FWD`; };
+const haveOf = (roster) => { const n = (pos) => roster.filter((p) => p.position === pos).length; return { GK: n("goalkeeper"), DEF: n("defender"), MID: n("midfielder"), FWD: n("forward") }; };
+const gapsOf = (id, have) => { const [d, m, f] = FORMATION_NEEDS[id], want = { GK: 1, DEF: d, MID: m, FWD: f }; return Object.entries(want).filter(([k, v]) => have[k] < v).map(([k, v]) => `${v - have[k]} ${k}`); };
+
 export default {
   id: "football",
   name: "Football",
@@ -58,14 +68,25 @@ export default {
 
   rosterTag: (p) => p.pos,   // the draft screen's roster list shows each player's position code
 
-  // One line under the draft header: what mix of positions works for all three formations (4-3-3 = 1/4/3/3, 4-4-2 = 1/4/4/2, 3-5-2 = 1/3/5/2).
-  // Keepers never come on as substitutes, so a spare keeper is wasted. Needs 1 GK + 4 DEF + 5 MID + 3 FWD = 13 for a natural XI in every formation.
+  // One line under the draft header: the position count of the squad so far. What each formation needs is the guide at the bottom of the draft screen (draftFormationTips).
   draftTip(roster, size) {
-    const n = (pos) => roster.filter((p) => p.position === pos).length, have = { GK: n("goalkeeper"), DEF: n("defender"), MID: n("midfielder"), FWD: n("forward") };
-    const mix = `${have.GK} GK · ${have.DEF} DEF · ${have.MID} MID · ${have.FWD} FWD`;
-    if (size < 13) return `Your squad: ${mix}. With ${size} spots pick one formation and fill it: 4-3-3 needs 1 GK, 4 DEF, 3 MID, 3 FWD; 4-4-2 needs 1/4/4/2; 3-5-2 needs 1/3/5/2.`;
-    const want = { GK: 1, DEF: 4, MID: 5, FWD: 3 }, need = Object.entries(want).filter(([k, v]) => have[k] < v).map(([k, v]) => `${v - have[k]} ${k}`);
-    return `Your squad: ${mix}. Best mix: 1 GK, 4 DEF, 5 MID, 3 FWD covers 4-3-3, 4-4-2 and 3-5-2 with natural positions; the rest is bench (a second keeper never plays).${need.length ? " Still needed: " + need.join(", ") + "." : " Core is complete: spend the rest on quality."}`;
+    const n = (pos) => roster.filter((p) => p.position === pos).length;
+    return `Your squad: ${n("goalkeeper")} GK · ${n("defender")} DEF · ${n("midfielder")} MID · ${n("forward")} FWD`;
+  },
+
+  // The guide at the very bottom of the draft screen (js/app.js builds it): one line per formation with what it needs (a tick = your squad already covers it), and the details of the formation picked in its dropdown.
+  // Packs are inlined into the Worker, so this file cannot import the engine: FORMATION_NEEDS repeats the engine's formations as [DEF, MID, FWD] and tools/test-football.mjs checks it against modes/football/engine.js.
+  draftFormationTips: {
+    title: "Formation guide",
+    options: FORMATION_IDS.map((id) => ({ id, label: id })),
+    list(roster, size) {
+      const have = haveOf(roster);
+      return FORMATION_IDS.map((id) => ({ id, text: `${id} · ${needText(id)}`, ok: gapsOf(id, have).length === 0 }));
+    },
+    detail(roster, size, id) {
+      const f = FORMATION_NEEDS[id] ? id : FORMATION_IDS[0], bench = Math.max(0, (size || 11) - 11), gaps = gapsOf(f, haveOf(roster));
+      return `${f} needs ${needText(f)}. Best mix with ${size || 11} spots: ${needText(f)}${bench ? `, plus ${bench} on the bench (a second keeper never plays)` : ""}.${gaps.length ? " Still needed: " + gaps.join(", ") + "." : " Core is complete: spend the rest on quality and bench depth."}`;
+    }
   },
 
   cardChips: (p) => [p.pos, p.club, p.nation, "OVR " + p.ovr, p.icon ? "Icon · " + p.era : p.edition],

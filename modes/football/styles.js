@@ -6,6 +6,18 @@ const CSS = `
 .fb-ovr{display:inline-block;font:800 .95rem var(--display,inherit);background:var(--yellow,#ffe14d);color:#101010;padding:0 6px;line-height:1.35;box-shadow:1px 1px 0 var(--pink,#ff3d57)}
 .fb-champ{font:800 1.4rem var(--display,inherit);background:var(--yellow,#ffe14d);color:#101010;padding:2px 10px;box-shadow:2px 2px 0 var(--pink,#ff3d57);display:inline-block}
 .fb-tip{flex:1 1 100%;margin:2px 0 0;font-size:.82rem;color:var(--muted,#9ab)}
+.fb-chips{display:flex;gap:6px;margin-top:6px}
+.fb-chip{flex:1 1 0;min-width:0;display:flex;align-items:baseline;justify-content:center;gap:6px;padding:4px 6px;border:2px solid var(--c);border-radius:999px;background:color-mix(in srgb,var(--c) 16%,transparent);color:var(--text,#fff);font-variant-numeric:tabular-nums}
+.fb-chip .k{font-size:.68rem;font-weight:800;letter-spacing:.06em;color:var(--c)}
+.fb-chip b{font:800 1rem var(--display,inherit)}
+.fb-chip.zero{opacity:.45;background:transparent}
+.fb-chip.p-gk{--c:var(--yellow,#ffe14d)}.fb-chip.p-def{--c:var(--blue,#4aa3ff)}.fb-chip.p-mid{--c:var(--teal,#35e07f)}.fb-chip.p-fwd{--c:var(--pink,#ff3d57)}
+.draftgrid>.d-ftips{grid-column:1/-1}
+.d-ftips h3{margin:0 0 6px}
+.fb-ftlist{display:grid;gap:2px;font-size:.82rem;color:var(--muted,#9ab);font-variant-numeric:tabular-nums}
+.fb-ftline.ok{color:var(--teal,#35e07f)}
+.fb-ftpick{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:10px 0 4px}
+.fb-ftdetail{margin:0;font-size:.85rem;color:var(--muted,#9ab)}
 .pill.rtag{font-weight:800;font-size:.68rem;padding:0 6px;margin-right:4px}
 .acard.fb .stat.s-pac,.sp.s-pac{--c:#ffe14d}.acard.fb .stat.s-sho,.sp.s-sho{--c:#ff5d73}.acard.fb .stat.s-pas,.sp.s-pas{--c:#4aa3ff}
 .acard.fb .stat.s-dri,.sp.s-dri{--c:#b987ff}.acard.fb .stat.s-def,.sp.s-def{--c:#35e0c0}.acard.fb .stat.s-phy,.sp.s-phy{--c:#ff9a3d}

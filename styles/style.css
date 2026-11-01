@@ -1517,6 +1517,38 @@ input[type=checkbox]:checked:focus {
   background: #21352f
 }
 
+/* unread dot: new messages from other people while the chat is closed */
+#chathead .chat-dot {
+  display: inline-block;
+  min-width: 20px;
+  height: 20px;
+  margin-left: 8px;
+  padding: 0 5px;
+  border-radius: 10px;
+  background: var(--pink);
+  color: #fff;
+  font: 800 .75rem/20px var(--body);
+  text-align: center;
+  vertical-align: 2px;
+  animation: chatdot 1.4s ease-in-out infinite
+}
+
+#chathead .chat-dot[hidden] {
+  display: none
+}
+
+@keyframes chatdot {
+  50% {
+    transform: scale(1.18)
+  }
+}
+
+@media(prefers-reduced-motion:reduce) {
+  #chathead .chat-dot {
+    animation: none
+  }
+}
+
 #chatbody {
   display: none;
   flex-direction: column;

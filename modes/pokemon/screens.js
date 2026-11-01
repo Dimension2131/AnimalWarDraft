@@ -55,7 +55,7 @@ export default function createScreens(ctx) {
       if (!order || !D) return;
       rc(rowsBox, ...order.map((id, i) => {
         const e = ent(id), st = setOf(e), names = st.moves.map((m) => (D.moves[m] || {}).n).filter(Boolean).join(" · ");
-        return h("div", { class: "pk-lrow" }, h("div", { class: "pk-lhead" }, h("span", { class: "pk-pos" }, i + 1), ctx.icon(e), h("div", { class: "grow" }, h("b", {}, e.name), h("div", { class: "row wrap" }, e.types.map(tp)))),
+        return h("div", { class: "pk-lrow" }, h("div", { class: "pk-lhead" }, h("span", { class: "pk-pos" }, i + 1), ctx.icon(e), h("div", { class: "grow" }, h("b", {}, e.name), h("div", { class: "row wrap" }, e.types.map(tp))), ctx.infoBtn(e, () => ({ reveal: "full", set: setOf(e) }))),   // your own team: everything may be shown
           h("p", { class: "pk-lmoves muted small" }, names || "No moves chosen"),
           h("div", { class: "pk-lact" },
             h("div", { class: "pk-seg" }, h("button", { class: "btn small", type: "button", "aria-label": `Move ${e.name} up`, disabled: i === 0, onclick: () => move(i, -1) }, "↑"), h("button", { class: "btn small", type: "button", "aria-label": `Move ${e.name} down`, disabled: i === order.length - 1, onclick: () => move(i, 1) }, "↓")),
@@ -95,17 +95,17 @@ export default function createScreens(ctx) {
       case "sub": mon(e.s).sub = e.on; break;
       case "haze": V.sides.forEach((s) => { s.team[s.active].stg = {}; }); break;
       case "turn": V.turn = e.n; break;
-      case "move": fx && fx.move(e.s, e.mt); break;
+      case "move": { const m = mon(e.s); ((V.seen ||= {})[m.id] ||= new Set()).add(e.m); fx && fx.move(e.s, e.mt); break; }   // V.seen = moves shown so far, per Pokémon id: the only thing the info panel may tell about an opponent in a manual battle
       case "end": V.end = e.w; break;
       default: break;
     }
   }
-  function makeViewer(mySide) {
+  function makeViewer(mySide, revealOf) {
     const top = 1 - mySide, V = { cur: null }, queue = []; let nextAt = 0, lines = [];
     const side = (cls, s) => {
-      const sprite = h("img", { class: "pk-sprite", alt: "" }), nm = h("span", {}), hpT = h("span", { class: "small" }), fill = h("i"), badges = h("div", { class: "pk-badges" }), team = h("div", { class: "pk-team" }), env = h("div", { class: "pk-badges" });
-      const plate = h("div", { class: "pk-plate" }, h("div", { class: "nm" }, nm, hpT), h("div", { class: "pk-hpbar" }, fill), badges, env, team);
-      return { s, el: h("div", { class: "pk-side " + cls }, sprite, plate), sprite, nm, hpT, fill, badges, env, team, shown: null };
+      const sprite = h("img", { class: "pk-sprite", alt: "" }), nm = h("span", {}), infoSlot = h("span", { class: "pk-info" }), hpT = h("span", { class: "small" }), fill = h("i"), badges = h("div", { class: "pk-badges" }), team = h("div", { class: "pk-team" }), env = h("div", { class: "pk-badges" });
+      const plate = h("div", { class: "pk-plate" }, h("div", { class: "nm" }, nm, infoSlot, hpT), h("div", { class: "pk-hpbar" }, fill), badges, env, team);
+      return { s, el: h("div", { class: "pk-side " + cls }, sprite, plate), sprite, infoSlot, nm, hpT, fill, badges, env, team, shown: null };
     };
     const T = side("foe", top), B = side("me", mySide);
     const arena = h("div", { class: "pk-arena" }, T.el, B.el), logBox = h("div", { class: "pk-log" }), banner = h("div", { class: "pk-banner" });
@@ -116,7 +116,7 @@ export default function createScreens(ctx) {
       const v = V.cur; if (!v) return;
       for (const P of [T, B]) {
         const sd = v.sides[P.s], m = sd.team[sd.active], e = ent(m.id);
-        if (P.shown !== m.id) { P.shown = m.id; P.sprite.replaceWith(P.sprite = img(e.image || ART + m.pid + ".png", "pk-sprite", e)); }
+        if (P.shown !== m.id) { P.shown = m.id; P.sprite.replaceWith(P.sprite = img(e.image || ART + m.pid + ".png", "pk-sprite", e)); rc(P.infoSlot, ctx.infoBtn(e, () => revealOf(P.s, m.id, V.cur))); }
         P.sprite.classList.toggle("fnt", !!m.fnt);
         const f = m.hp / m.max; P.nm.textContent = `${m.name}`; P.hpT.textContent = `${m.hp}/${m.max}`; P.fill.style.width = (100 * f) + "%"; P.fill.className = f < 0.2 ? "low" : f < 0.5 ? "mid" : "";
         const b = []; if (m.st) b.push(h("span", { class: "pk-b " + m.st }, ST_LBL[m.st])); if (m.sub) b.push(h("span", { class: "pk-b env" }, "Substitute"));
@@ -148,16 +148,25 @@ export default function createScreens(ctx) {
 
   // =============== BATTLE SCREEN ===============
   function battleScreen() {
-    let curId = "", V = null, mode = "", B = null, lastN = 0, sent = {}, autoData = null, loadingFor = "", subs = [], st = null, mySide = 0, lastCtl = "";
+    let curFight = null, curId = "", V = null, mode = "", B = null, lastN = 0, sent = {}, autoData = null, loadingFor = "", subs = [], st = null, mySide = 0, lastCtl = "";
     const head = h("div", { class: "qz-head" }), stage = h("div", {}), ctl = h("div", { class: "card pk-ctl" }), side = h("div", {});
     ctl.hidden = true;
     screen(head, h("div", { class: "card" }, stage), ctl, side);
     const stopSubs = () => { subs.forEach((u) => { try { u(); } catch (e) { /* ignore */ } }); subs = []; };
     const meOf = (f) => (S.key === f.b ? 1 : 0);
     const cdb = bar(0), cdt = h("span", { class: "muted small" });
+    // What the info panel may show about a Pokémon in this battle.
+    //   full: auto battles (every device re-plays them and the sets are public in the tournament), your own Pokémon, and every Pokémon once the battle has ended on screen.
+    //   used: an opponent (or, for a spectator, either side) in a manual battle that is still running: species facts + the moves it has already used, nothing else.
+    const revealOf = (s, id, view) => {
+      const f = curFight, T = S.tour; if (!f || !T) return { reveal: "used", used: [] };
+      const k = s === 0 ? f.a : f.b, own = S.role === "player" && S.key === k, ended = !!(view && view.end != null);
+      if (f.style === "auto" || own || ended) return { reveal: "full", set: ((T.sets || {})[k] || {})[id] || null };
+      return { reveal: "used", used: [...((view && view.seen && view.seen[id]) || [])] };
+    };
 
     function setup(f) {
-      curId = f.id; mode = f.style; V = null; B = null; lastN = 0; sent = {}; autoData = null; st = null; stopSubs(); mySide = meOf(f); lastCtl = "";
+      curFight = f; curId = f.id; mode = f.style; V = null; B = null; lastN = 0; sent = {}; autoData = null; st = null; stopSubs(); mySide = meOf(f); lastCtl = "";
       rc(stage, h("p", { class: "muted center" }, "Loading the battle…"));
     }
     async function prepare(T, f) {
@@ -165,9 +174,9 @@ export default function createScreens(ctx) {
       const teams = teamsOfFight(D, ctx.entities.map, T, f), names = [nameOf(f.a), nameOf(f.b)];
       if (f.style === "auto") {
         const s0 = E.createBattle({ teams, names, seed: f.seed | 0 }), init = toView(s0), res = E.runAuto({ teams: teamsOfFight(D, ctx.entities.map, T, f), names, seed: f.seed | 0 });
-        autoData = { events: res.events, played: 0 }; V = makeViewer(mySide); V.init(s0, null); rc(stage, vsHeader(f), V.el); V.paint();
+        autoData = { events: res.events, played: 0 }; V = makeViewer(mySide, revealOf); V.init(s0, null); rc(stage, vsHeader(f), V.el); V.paint();
       } else {
-        V = makeViewer(mySide); rc(stage, vsHeader(f), V.el);
+        V = makeViewer(mySide, revealOf); rc(stage, vsHeader(f), V.el);
         subs.push(N.watch(S.code, `pkb/${f.id}`, (v) => { B = v; schedule(); }));
       }
     }
@@ -208,7 +217,7 @@ export default function createScreens(ctx) {
           h("b", {}, m.n), eff !== 1 ? h("span", { class: "pk-eff" }, eff === 0 ? "No effect" : eff > 1 ? "Super effective ×" + eff : "Not very effective") : h("span"),
           h("small", {}, `${cap(m.t)} · ${catIcon(m.c)} ${m.p == null ? "—" : m.p} power`), h("small", { class: "pk-pp" }, `${slot ? slot.pp + "/" + slot.max : "∞"} uses left`));
       })));
-      if (sw.length) kids.push(h("div", {}, h("p", { class: "muted small" }, st.phase === "replace" ? "Your Pokémon fainted:" : "Or switch:"), h("div", { class: "pk-bench" }, sw.map((c) => { const t = st.sides[mySide].team[c.i], e = ent(t.id); return h("button", { class: "pk-bbtn", type: "button", onclick: () => send(c) }, ctx.icon(e), h("span", { class: "grow" }, h("b", {}, t.name), h("div", { class: "pk-hpbar" }, h("i", { style: `width:${100 * t.hp / t.max}%` })))); }))));
+      if (sw.length) kids.push(h("div", {}, h("p", { class: "muted small" }, st.phase === "replace" ? "Your Pokémon fainted:" : "Or switch:"), h("div", { class: "pk-bench" }, sw.map((c) => { const t = st.sides[mySide].team[c.i], e = ent(t.id); return h("div", { class: "pk-bwrap" }, h("button", { class: "pk-bbtn", type: "button", onclick: () => send(c) }, ctx.icon(e), h("span", { class: "grow" }, h("b", {}, t.name), h("div", { class: "pk-hpbar" }, h("i", { style: `width:${100 * t.hp / t.max}%` })))), ctx.infoBtn(e, { reveal: "full", set: (((S.tour || {}).sets || {})[S.key] || {})[t.id] || null })); }))));
       rc(ctl, ...kids);
     }
     function between(T) {
@@ -257,7 +266,7 @@ export default function createScreens(ctx) {
     return { update() { again.update();
       const r = (S.game && S.game.results) || {}, sc = r.scores || {}, T = S.tour || {}, ch = arr(r.champion);
       rc(body, ch.length ? h("p", { class: "pk-banner" }, `🏆 ${ch.map(nameOf).join(" & ")}`) : null,
-        ...arr(r.order).map((k, i) => h("div", { class: "pk-lrow" }, h("div", { class: "row between" }, h("b", {}, `${i + 1}. ${nameOf(k)}`), h("span", {}, `${sc[k] ?? 0} pts`)), h("div", { class: "row wrap pk-rteam" }, arr(T.lineups && T.lineups[k]).map((id) => { const e = ent(id); return e.image ? img(e.image, "sil color", e) : ctx.icon(e); })))),
+        ...arr(r.order).map((k, i) => h("div", { class: "pk-lrow" }, h("div", { class: "row between" }, h("b", {}, `${i + 1}. ${nameOf(k)}`), h("span", {}, `${sc[k] ?? 0} pts`)), h("div", { class: "row wrap pk-rteam" }, arr(T.lineups && T.lineups[k]).map((id) => { const e = ent(id); return ctx.withInfo(e.image ? img(e.image, "sil color", e) : ctx.icon(e), e, { reveal: "full", set: (((T.sets || {})[k] || {})[id]) || null }); })))),
         arr(r.order).length ? null : h("p", { class: "muted" }, "No results recorded."));
     } };
   }

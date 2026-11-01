@@ -24,7 +24,8 @@ export default function createScreens(ctx) {
     const save = (done) => { dirty = false; clearTimeout(pending); return N.put(S.code, `lineups/${S.key}`, JSON.parse(JSON.stringify({ order, done: !!done, formation }))).catch((e) => toast(e.message)); };
     const later = () => { dirty = true; clearTimeout(pending); pending = setTimeout(() => save(false), 400); };
     const readyBtn = h("button", { class: "btn primary big", onclick: () => save(true) }, "Ready");
-    const selForm = h("select", { "aria-label": "Formation", onchange: (e) => setFormation(e.target.value) }, E.FORMATION_IDS.map((f) => h("option", { value: f }, f)));
+    const formGroups = [...new Set(E.FORMATION_IDS.map((f) => E.FORMATIONS[f].group))];   // "Back four", "Back three", "Back five": the 20 formations are listed by their back line
+    const selForm = h("select", { "aria-label": "Formation", onchange: (e) => setFormation(e.target.value) }, formGroups.map((g) => h("optgroup", { label: g }, E.FORMATION_IDS.filter((f) => E.FORMATIONS[f].group === g).map((f) => h("option", { value: f }, f)))));
     const autoBtn = h("button", { class: "btn", type: "button", onclick: () => { order = E.autoLineup(mine().map(ent), formation); sel = -1; later(); draw(); } }, "Auto-pick best XI");
     const mine = () => arr(((S.ledger || {}).rosters || {})[S.key]).map((x) => x.id);
     screen(h("h2", {}, "Set your team"),
@@ -52,7 +53,8 @@ export default function createScreens(ctx) {
     function draw() {
       if (!order) return;
       const slots = E.slotsOf(formation), players = order.map(ent);
-      const lines = ["FWD", "MID", "DEF", "GK"].map((ln) => h("div", { class: "fb-line" }, slots.filter((s) => s.line === ln).map((s) => slotEl(s.i, order[s.i] ? players[s.i] : null, s))));
+      const rows = []; slots.forEach((s) => { (rows[s.row] = rows[s.row] || []).push(s); });   // the formation's own rows (a 4-2-3-1 has a CDM row and an attacking-mid row), front row on top
+      const lines = rows.filter(Boolean).reverse().map((r) => h("div", { class: "fb-line" }, r.map((s) => slotEl(s.i, order[s.i] ? players[s.i] : null, s))));
       rc(pitch, ...lines);
       rc(benchBox, ...(order.length > E.XI ? order.slice(E.XI).map((id, j) => slotEl(E.XI + j, players[E.XI + j], null)) : [h("span", { class: "fb-hint" }, "No bench: your whole squad is on the pitch.")]));
       selForm.value = formation;
@@ -120,7 +122,9 @@ export default function createScreens(ctx) {
     const head = h("div", { class: "qz-head" }), stage = h("div", {}), side = h("div", { class: "card" });
     screen(head, h("div", { class: "card" }, stage), side);
     const planFor = (T, f) => (plans[f.id] ||= planOf(ctx.entities.map, T, f, [nameOf(f.a), nameOf(f.b)]));
-    const xiList = (T, k) => { const ids = arr(T.lineups[k]).slice(0, E.XI).map((id) => ent(id)); return h("div", { class: "fb-xi" }, h("b", {}, `${nameOf(k)} · ${(T.formations || {})[k] || E.DEFAULT_FORMATION}`), ...ids.map((p) => h("span", {}, `${p.pos} ${p.name} (${p.ovr})`))); };
+    const xiList = (T, k) => { const ids = arr(T.lineups[k]).slice(0, E.XI).map((id) => ent(id)); return h("div", { class: "fb-xi" }, h("b", {}, `${nameOf(k)} · ${(T.formations || {})[k] || E.DEFAULT_FORMATION}`), ...ids.map((p) => h("span", {}, ctx.withInfo(`${p.pos} ${p.name} (${p.ovr})`, p)))); };
+    // under the live film: both squads with an "i" each (the film is a canvas, so there is nothing to tap on it)
+    const playersBox = (T, f) => h("details", { class: "fb-players" }, h("summary", {}, "Players"), h("div", { class: "row between" }, xiList(T, f.a), xiList(T, f.b)));
     const speedPill = (f) => `${(C.SPEEDS[C.normSpeed(f.speed || (f.style === "quick" ? "quick" : "watch"))] || C.SPEEDS.full).label}${f.disc ? " · cards on" : ""}`;
     function compareView(T, f) {
       const teams = [f.a, f.b].map((k) => { const pl = arr(T.lineups[k]).map(ent); return { xi: pl.slice(0, E.XI), bench: pl.slice(E.XI), formation: (T.formations || {})[k] || E.DEFAULT_FORMATION }; });
@@ -174,7 +178,7 @@ export default function createScreens(ctx) {
         if (!force && cmpDone === key) return;
         cmpDone = key;
         if (pre) rc(stage, h("div", { class: "fb-row-vs" }, h("b", {}, names[0]), h("span", { class: "muted" }, "vs"), h("b", {}, names[1]), h("span", { class: "pill" }, speedPill(f))), h("h4", { class: "center" }, "Team comparison"), compareView(T, f), h("div", { class: "row between" }, xiList(T, f.a), xiList(T, f.b)), h("p", { class: "muted center", "data-kickoff": "1" }));
-        else rc(stage, viewer.el);
+        else rc(stage, viewer.el, playersBox(T, f));
       },
       tick() {
         const T = S.tour, now = N.now(); if (!T || T.state !== "playing" || !plan) return;

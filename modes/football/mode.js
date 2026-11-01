@@ -26,7 +26,7 @@ export default {
         const bench = Math.max(0, Math.min(BENCH_MAX, (L.rosterSize || XI) - XI));
         if (typeof document === "undefined" || document.activeElement !== inBench) inBench.value = bench; inBench.disabled = !host;
         selStyle.value = speedOfSettings(L); selStyle.disabled = !host; cards.checked = !!L.discipline; cards.disabled = !host;   // old rooms: matchStyle watch = Full, quick = Instant
-        note.textContent = `Each manager drafts ${XI + bench} players: a starting XI of 11 and ${bench} on the bench. Formations: 4-3-3, 4-4-2, 3-5-2. Every match is one seeded simulation, so Instant, Fast and Full always show the same score and scorers. Knockout: a draw goes to a penalty shoot-out; 2 managers play one final, 3 play A v B then the loser plays C then the final, 4+ play a bracket with a third-place match. Players out of position play worse; bench players come on when starters tire (up to 3 subs). Small chemistry bonus for team-mates from the same nation or club.`;
+        note.textContent = `Each manager drafts ${XI + bench} players: a starting XI of 11 and ${bench} on the bench. Formations: 20 to choose from, from 4-3-3, 4-4-2 and 3-5-2 to 4-2-3-1, 3-4-3 and 5-4-1; each one changes who attacks, who controls the ball and how well you defend. Every match is one seeded simulation, so Instant, Fast and Full always show the same score and scorers. Knockout: a draw goes to a penalty shoot-out; 2 managers play one final, 3 play A v B then the loser plays C then the final, 4+ play a bracket with a third-place match. Players out of position play worse; bench players come on when starters tire (up to 3 subs). Small chemistry bonus for team-mates from the same nation or club.`;
       }
     };
   },

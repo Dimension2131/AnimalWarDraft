@@ -12,7 +12,8 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const S = (p, k) => (typeof p[k] === "number" ? p[k] : 40);   // same default as the engine's S()
 
 export const ENGINE = {
-  fit: { line: 0.95, near: 0.85, far: 0.72, gk: 0.35 },
+  fit: { kin: 0.97, line: 0.95, near: 0.85, far: 0.72, gk: 0.35 },
+  shape: { att: { g: 0.4, lim: 0.07 }, ctl: { g: 0.25, lim: 0.05 }, def: { g: 0.4, lim: 0.07 } },
   keeperAsOutfield: { pac: 0.7, sho: 25, pas: 0.8, dri: 30, def: 20, phy: 55 }, notKeeperGk: 25,
   gk: { gkp: 0.8, kic: 0.2, div: 3.99 },
   chem: 0.004, chemCap: 6,
@@ -38,8 +39,10 @@ const mixTxt = (rows) => rows.map(([w, k]) => `${w} × ${k}`).join(" + ");
 const K = ENGINE;
 
 export const ENGINE_SNIPPETS = [
-  `(p.positions || [p.pos]).includes(slot.code) ? 1 : ${K.fit.line}`,
-  `if (pl === "GK" || slot.line === "GK") return ${K.fit.gk};`,
+  `if (pl === "GK" || slot.line === "GK") return pl === slot.line ? 1 : ${K.fit.gk};`, `if (pos.includes(slot.code)) return 1;`,
+  `if ((KIN[slot.code] || []).some((c) => pos.includes(c))) return ${K.fit.kin};`, `if (pl === slot.line) return ${K.fit.line};`,
+  `pf = (v, w, g, lim) => Math.max(1 - lim, Math.min(1 + lim, 1 + g * (v / w - 1)))`,
+  `att: pf(x[0], r[0], ${K.shape.att.g}, ${K.shape.att.lim}), ctl: pf(x[1], r[1], ${K.shape.ctl.g}, ${K.shape.ctl.lim}), def: pf(x[2], r[2], ${K.shape.def.g}, ${K.shape.def.lim})`,
   `=== 1 ? ${K.fit.near} : ${K.fit.far};`,
   `pac: S(p, "spd") * ${K.keeperAsOutfield.pac}, sho: ${K.keeperAsOutfield.sho}, pas: S(p, "kic") * ${K.keeperAsOutfield.pas}, dri: ${K.keeperAsOutfield.dri}, def: ${K.keeperAsOutfield.def}, phy: ${K.keeperAsOutfield.phy}`,
   `(S(p, "div") + S(p, "han") + S(p, "ref") + S(p, "gkp") * ${K.gk.gkp} + S(p, "kic") * ${K.gk.kic}) / ${K.gk.div} : ${K.notKeeperGk});`,
@@ -97,19 +100,21 @@ registerProfile("football", (ctx, p, opts) => {
       ? [...Object.entries(o).map(([k, v]) => bar(k.toUpperCase(), r1(v), max, `Derived from his keeper stats: ${k === "pac" ? `speed × ${K.keeperAsOutfield.pac}` : k === "pas" ? `kicking × ${K.keeperAsOutfield.pas}` : "a fixed value"}.`, "sub hidden-stat", STAT_COLOR[k])),
         formula(`pac = speed × ${K.keeperAsOutfield.pac}   sho = ${K.keeperAsOutfield.sho}   pas = kicking × ${K.keeperAsOutfield.pas}\ndri = ${K.keeperAsOutfield.dri}   def = ${K.keeperAsOutfield.def}   phy = ${K.keeperAsOutfield.phy}`)]
       : [...other.map((s) => kv(s.label, "n/a", `Outfielders have no ${s.label} rating: if one plays in goal he counts as ${K.notKeeperGk}.`)), formula(`GK rating of an outfielder = ${K.notKeeperGk}`)]),
-    section(`Position fit by slot (his line: ${line})`, note("Natural spot 1, same line 0.95, one line away 0.85, two lines 0.72, keeper or outfielder in goal 0.35."), ...fitRows,
-      formula(`fit = 1 at a listed position, ${K.fit.line} elsewhere in his line, ${K.fit.near} one line away, ${K.fit.far} two lines away, ${K.fit.gk} between goal and the pitch`)),
+    section(`Position fit by slot (his line: ${line})`, note("A listed position 1, a close relative of the slot (left-back at wing-back, CM at CDM, CF at ST...) 0.97, same line 0.95, one line away 0.85, two lines 0.72, keeper or outfielder in goal 0.35."), ...fitRows,
+      formula(`fit = 1 at a listed position, ${K.fit.kin} at a close relative of the slot, ${K.fit.line} elsewhere in his line, ${K.fit.near} one line away, ${K.fit.far} two lines away, ${K.fit.gk} between goal and the pitch`)),
     section("What he adds to his team", ...(line === "GK" ? [kv("Goalkeeping", r1(gkR)), note("A keeper only counts through his goalkeeping rating, in the keeper slot.")] : [
       kv("Attack", r1(score("att")), "His attack score, weighted by his line in the team's attack."), formula(`att (${line}) = ${mixTxt(ownMix("att"))}  (team weight ${W.att[line]})`),
       kv("Control", r1(score("ctl")), "Drives possession: who gets the attacking moves."), formula(`control (${line}) = ${mixTxt(ownMix("ctl"))}  (team weight ${W.ctl[line]})`),
       kv("Defence", r1(score("def")), "His contribution to stopping shots from being created."), formula(`defence (${line}) = ${mixTxt(ownMix("def"))}  (team weight ${W.def[line]})`)])),
     section("Team rules that touch him",
+      formula(`Role of the slot he plays (attack / control / defence weight, against a plain player of his line):\n${Object.entries(E.ROLE).map(([c, r]) => `${c} ${r.join(" / ")}`).join("   ")}\nShooting role (how often the slot takes the shot): ${Object.entries(E.SHOOT).map(([c, v]) => `${c} ×${v}`).join("   ")}`, "A CDM shields the back line, a CAM creates, wing-backs overlap: the same player counts differently in each slot."),
+      formula(`Formation shape: the ten outfield slots of a formation carry a total attack, control and defence weight. Compared with a 4-3-3, ratings are scaled by 1 + factor × (weight ÷ 4-3-3 weight − 1)\nattack: factor ${K.shape.att.g}, at most ±${pct(K.shape.att.lim)}   control: factor ${K.shape.ctl.g}, at most ±${pct(K.shape.ctl.lim)}   defence: factor ${K.shape.def.g}, at most ±${pct(K.shape.def.lim)}`, "Equal players in a back five attack less and defend more; a five-man midfield wins more of the ball."),
       formula(`Chemistry: +1 for each extra team-mate of the same nation, plus +1 for each extra team-mate of the same club (Icons excluded), at most ${K.chemCap}.\nEvery rating × (1 + points × ${K.chem})`, `Six points is +${r1(K.chemCap * K.chem * 100)}%.`),
       formula(`Fatigue after minute ${K.tire.from}: × (1 − (minute − ${K.tire.from}) × ${K.tire.k} × (${K.tire.base} − min(1, physical/100)))\nHis factor at minute 90: ${Math.round((1 - (90 - K.tire.from) * K.tire.k * (K.tire.base - Math.min(1, o.phy / 100))) * 1000) / 1000}`, "Substitutes arrive fresh."),
       note(`Substitutions at minutes ${K.subAt.join(", ")} (at most ${K.maxSubs}): the most tired outfielder is replaced when a bench player of that line is clearly fresher.`),
       formula(`Cards and injuries (only when switched on in the room), per team per minute: red ${+(K.disc.red * 100).toFixed(2)}%, yellow ${+((K.disc.yellow - K.disc.red) * 100).toFixed(2)}%, injury ${+((K.disc.injury - K.disc.yellow) * 100).toFixed(2)}%. Goalkeepers are never booked or hurt.`)),
     section("How a match works",
-      formula(`Each minute has an attacking move with chance ${K.move} (about 28 per match).\nWho attacks: control³ / (control³ + control³ of the other side)\nA shot happens with chance ${K.shot.base} + (attack − their defence) / ${K.shot.div}, kept between ${pct(K.shot.lo)} and ${pct(K.shot.hi)}\nShooter weight: forward ${K.shooterW.FWD}, midfielder ${K.shooterW.MID}, defender ${K.shooterW.DEF}, times (shooting / 70)^${K.shooterW.pow}\nOn target: ${K.onTarget.base} + (shooting − ${K.onTarget.c}) / ${K.onTarget.d} + (attack − defence) / ${K.onTarget.att}, kept between ${pct(K.onTarget.lo)} and ${pct(K.onTarget.hi)}\nGoal: ${K.goal.base} × (1 + (shooting − keeper) / ${K.goal.d}) × (1 + (attack − defence) / ${K.goal.att}), kept between ${pct(K.goal.lo)} and ${pct(K.goal.hi)}`),
+      formula(`Each minute has an attacking move with chance ${K.move} (about 28 per match).\nWho attacks: control³ / (control³ + control³ of the other side)\nA shot happens with chance ${K.shot.base} + (attack − their defence) / ${K.shot.div}, kept between ${pct(K.shot.lo)} and ${pct(K.shot.hi)}\nShooter weight: forward ${K.shooterW.FWD}, midfielder ${K.shooterW.MID}, defender ${K.shooterW.DEF}, times the slot's shooting role, times (shooting / 70)^${K.shooterW.pow}\nOn target: ${K.onTarget.base} + (shooting − ${K.onTarget.c}) / ${K.onTarget.d} + (attack − defence) / ${K.onTarget.att}, kept between ${pct(K.onTarget.lo)} and ${pct(K.onTarget.hi)}\nGoal: ${K.goal.base} × (1 + (shooting − keeper) / ${K.goal.d}) × (1 + (attack − defence) / ${K.goal.att}), kept between ${pct(K.goal.lo)} and ${pct(K.goal.hi)}`),
       note("Penalty shoot-outs (knockout draws): " + `goal chance = ${K.pen.base} + (shooting − 70) / ${K.pen.d} − (keeper − 70) / ${K.pen.gk}, kept between ${pct(K.pen.lo)} and ${pct(K.pen.hi)}; a keeper saves a non-scored kick with chance ${K.pen.save.base} + (keeper − 70) / ${K.pen.save.d}, between ${pct(K.pen.save.lo)} and ${pct(K.pen.save.hi)}.`)),
     section(gk ? `Worked example: ${p.name} in goal` : `Worked example: ${p.name} taking a shot`, ...(gk ? keeperRows : [
       note(`Against a side of equal strength and the pool-average keeper (${r1(refK)}).`),

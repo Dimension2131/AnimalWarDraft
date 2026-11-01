@@ -15,7 +15,7 @@ const CSS = ART_CSS + `
 .rc-strip{display:flex;border:2px solid var(--edge,#888);border-radius:6px;overflow:hidden;margin:6px 0}
 .rc-seg{background-repeat:repeat-x;background-size:auto 100%;padding:6px;font-size:.72rem;font-weight:700;color:#fff;text-shadow:0 1px 2px #000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-right:1px solid rgba(255,255,255,.35);min-width:0}
 .rc-seg:last-child{border-right:0}.rc-seg.now{outline:2px solid var(--yellow,#ffd23a);outline-offset:-2px}
-.rc-lane{margin:10px 0}.rc-lane .top{display:flex;justify-content:space-between;gap:8px;font-size:.85rem;margin-bottom:2px}
+.rc-infobox{display:inline-flex;align-items:center;gap:4px}.rc-lane{margin:10px 0}.rc-lane .top{display:flex;justify-content:space-between;gap:8px;font-size:.85rem;margin-bottom:2px}
 .rc-track{position:relative;height:84px;border:2px solid var(--rule,#555);border-radius:8px;overflow:hidden;display:flex;background:#111}
 .rc-track .seg{position:relative;height:100%;background-repeat:repeat-x;background-size:auto 100%;border-left:2px dashed rgba(255,255,255,.55)}
 .rc-track .seg:first-child{border-left:0}
@@ -123,8 +123,8 @@ export default function createScreens(ctx) {
         const track = h("div", { class: "rc-track" }, res.course.map((l, i) => { const ar = artOf(l); return h("div", { class: "seg " + ar.class, style: `width:${l.len / total * 100}%;${ar.style}` }, slots[i]); }), runner);
         const root = h("div", { class: "rc-lane", style: `--pc:${color}` }, top, track);
         top.append(h("span", {}, h("span", { class: "rc-dot" }), h("b", {}, t.name), t.key === S.key ? h("span", { class: "pill you" }, "you") : null), rank);
-        const info = h("span", { class: "muted" }); top.append(info);
-        return { ti, root, runner, rank, info, slots, leg: -1, color };
+        const info = h("span", { class: "muted" }), infoI = h("span", { class: "rc-i" }); top.append(h("span", { class: "rc-infobox" }, info, infoI));
+        return { ti, root, runner, rank, info, infoI, slots, leg: -1, color };
       });
       lanesBox.replaceChildren(...lanes.map((l) => l.root));
       const head2 = ["Player", ...res.course.map((l, i) => `${i + 1} ${l.icon}`), "Total"];
@@ -151,7 +151,7 @@ export default function createScreens(ctx) {
         const p = dists[ln.ti], team = res.teams[ln.ti], a = ctx.entities.map.get(team.legs[p.leg].animal);
         ln.runner.style.left = Math.max(1.5, Math.min(98.5, p.dist / total * 100)) + "%";
         if (ln.leg !== p.leg) {
-          ln.runner.replaceChildren(silEl(a)); const first = ln.leg < 0; ln.leg = p.leg;
+          ln.runner.replaceChildren(silEl(a)); ln.infoI.replaceChildren(...[a && ctx.infoBtn ? ctx.infoBtn(a) : null].filter(Boolean)); const first = ln.leg < 0; ln.leg = p.leg;
           if (!first) { ln.root.classList.add("pass"); setTimeout(() => ln.root.classList.remove("pass"), 900); }
         }
         ln.slots.forEach((sl, i) => { sl.className = "rc-slot" + (pre ? "" : p.finished || i < p.leg ? " done" : i === p.leg ? " on" : ""); });
@@ -197,7 +197,7 @@ export default function createScreens(ctx) {
           h("tbody", {}, arr(r.order).map((k, i) => {
             const t = res.teams.find((x) => x.key === k);
             return h("tr", {}, h("td", {}, i + 1), h("td", {}, nameOf(k)), h("td", {}, fmtTime((r.totals || {})[k] || 0)), h("td", {}, fmtTime((r.best || {})[k] || 0)),
-              ...(same && t ? t.legs.map((l) => { const a = ctx.entities.map.get(l.animal); return h("td", {}, `${a ? a.name : l.animal} ${fmtTime(l.ms)}`); }) : []));
+              ...(same && t ? t.legs.map((l) => { const a = ctx.entities.map.get(l.animal); return h("td", {}, a ? ctx.withInfo(`${a.name} ${fmtTime(l.ms)}`, a) : `${l.animal} ${fmtTime(l.ms)}`); }) : []));
           }))));
       }
     };

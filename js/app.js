@@ -7,6 +7,7 @@ import { installInfo, infoBtn, withInfo } from "./infocard.js";
 import "../packs/animals/profile.js";   // each world registers its info profile builder on load (js/infocard.js)
 import "../modes/basketball/profile.js";
 import "../modes/football/profile.js";
+import "../modes/pokemon/profile.js";
 import { simulate, validateAnimals, balanceTest } from "./sim.js";
 import * as FBC from "../modes/football/card.js";
 import * as BBC from "../modes/basketball/card.js";
@@ -195,6 +196,12 @@ async function main() {
     if (firstConn) { firstConn = false; return; }
     if (c && !was && S.code) N.reassert(S.code, S.role, S.key, S.name).then((ok) => { if (ok === false) schedule(); }).catch(console.warn);
   });
+  // The draft tip under the purse. A tip made of four position counts (football: "Your squad: 1 GK · 4 DEF · 3 MID · 0 FWD") is drawn as four chips, empty positions dimmed; any other tip stays plain text.
+  function tipEl(text) {
+    const m = [...String(text).matchAll(/(\d+) (GK|DEF|MID|FWD)\b/g)];
+    if (m.length !== 4 || !/^Your squad/.test(text)) return h("p", { class: "fb-tip" }, text);
+    return h("div", { class: "fb-tip fb-chips", role: "group", "aria-label": text }, ...m.map((x) => h("span", { class: "fb-chip p-" + x[2].toLowerCase() + (+x[1] ? "" : " zero") }, h("span", { class: "k" }, x[2]), h("b", {}, x[1]))));
+  }
   function topbar() {
     const b = $("#banner"), tb = $("#topbar");
     rc(tb);
@@ -494,7 +501,19 @@ async function main() {
     const slot = h("div", { class: "actionslot" }, bidBox, claimBox, idleBox);
     const tbl = h("div", { class: "card d-tbl" }), logBox = h("div", { class: "card d-log" }), rosters = h("div", { class: "card d-ros" });
     const dock = h("div", { class: "card lotcard dock d-dock" }, h("div", { class: "dockrow" }, bigBid, cdText), cd.el, msg, slot);
-    screen(topInfo, cardBox, dock, tbl, logBox, rosters).classList.add("draftgrid");
+    // Optional pack guide at the very bottom of the draft screen (football: a picker for one formation's details). The picker and the boxes are built ONCE here;
+    // update() only refills a box when its text changed, so the chosen formation and an open dropdown survive every database tick. Packs without PK.draftFormationTips get no box at all.
+    const FT = PK.draftFormationTips;
+    let ftPick = FT ? FT.options[0].id : "", ftRos = [], ftSize = 0;
+    const ftDetail = h("p", { class: "fb-ftdetail" });
+    const ftDraw = () => {
+      if (!FT) return;
+      const d = FT.detail(ftRos, ftSize, ftPick) || "";
+      if (changed(ftDetail, d)) ftDetail.textContent = d;
+    };
+    const ftSel = FT ? h("select", { "aria-label": "Formation details", onchange: (e) => { ftPick = e.target.value; ftDraw(); } }, FT.options.map((o) => h("option", { value: o.id }, o.label))) : null;
+    const ftBox = FT ? h("div", { class: "card d-ftips" }, h("h3", {}, FT.title), h("label", { class: "fb-ftpick" }, "Details for ", ftSel), ftDetail) : null;
+    screen(topInfo, cardBox, dock, tbl, logBox, rosters, ftBox).classList.add("draftgrid");
     return {
       tick() {
         const A = A0(); if (!A || A.resolved) return;
@@ -508,7 +527,7 @@ async function main() {
         if (A && A.id !== lastId) { lastId = A.id; barMax = Math.max(1000, A.deadline - N.now()); bidTouched = false; }
         if (changed(topInfo, [L.drawIndex || 0, arr(G.pool).length, L.stall || 0, st.stallLimit, st.rosterSize, S.role, bal[me], arr(ros[me]).map((x) => x.id)]))
           rc(topInfo, h("div", { class: "lotbar" }, h("span", { class: "lotno" }, `Lot ${Math.min((L.drawIndex || 0) + 1, arr(G.pool).length)} of ${arr(G.pool).length}`), L.stall ? h("span", { class: "pill" }, `${L.stall} of ${settings().stallLimit ?? R.STALL_LIMIT} unsold in a row`) : null),
-          S.role === "player" ? h("div", { class: "purse" }, h("b", {}, `$${bal[me] ?? 0}`), h("span", { class: "muted" }, `left, ${rn()} ${arr(ros[me]).length} of ${st.rosterSize}`)) : h("div", { class: "pill" }, "spectating"), S.role === "player" && PK.draftTip ? h("p", { class: "fb-tip" }, PK.draftTip(arr(ros[me]).map((x) => ENT.map.get(x.id)).filter(Boolean), st.rosterSize)) : null);
+          S.role === "player" ? h("div", { class: "purse" }, h("b", {}, `$${bal[me] ?? 0}`), h("span", { class: "muted" }, `left, ${rn()} ${arr(ros[me]).length} of ${st.rosterSize}`)) : h("div", { class: "pill" }, "spectating"), S.role === "player" && PK.draftTip ? tipEl(PK.draftTip(arr(ros[me]).map((x) => ENT.map.get(x.id)).filter(Boolean), st.rosterSize)) : null);
         const sold = A && A.resolved && A.outcome && A.outcome.winner ? ENT.map.get(A.outcome.animalId) : null;   // mystery traits: the bought animal is shown once with its traits revealed
         // Rebuilt only when what it shows changes: update() runs many times a second, and a rebuilt card would swallow a tap on its "i".
         const cardKey = active && a ? `lot:${a.id}:${!!st.mysteryTraits}` : sold && st.mysteryTraits ? `sold:${sold.id}` : `ph:${A && A.resolved && A.outcome ? 1 : 0}`;
@@ -545,6 +564,7 @@ async function main() {
           rc(logBox, h("h3", {}, "Draft log"), ...entries.map(([, t]) => h("div", { class: "logline" + (t.startsWith("STALL") ? " stall" : "") }, t)));
         // Rosters: which ones are open lives in openRos (not in the DOM), so a rebuild can never close the one somebody is reading. Your own starts open, every other starts closed.
         if (!rosSeen && S.role === "player") { openRos.add(me); rosSeen = true; }
+        if (ftBox) { const mineR = S.role === "player" ? arr(ros[me]).map((x) => ENT.map.get(x.id)).filter(Boolean) : null; ftBox.hidden = !mineR; if (mineR) { ftRos = mineR; ftSize = st.rosterSize; ftDraw(); } }   // spectators have no squad: no guide
         const rosData = (G.keys ? arr(G.keys) : []).map((k) => [k, nameOf(k), arr(ros[k]).map((x) => [x.id, x.price || 0])]);
         if (changed(rosters, [rosData, rns()]))
           rc(rosters, h("h3", {}, P.cap(rns())), ...rosData.map(([k, nm, list]) => h("details", { open: openRos.has(k), ontoggle: (e) => { if (e.target.open) openRos.add(k); else openRos.delete(k); } }, h("summary", {}, `${nm} (${list.length})`),
@@ -627,17 +647,34 @@ async function main() {
   };
 
   // ================= CHAT =================
-  const chatList = $("#chatlist"), chatIn = $("#chatin");
+  const chatList = $("#chatlist"), chatIn = $("#chatin"), chatHead = $("#chathead");
+  // Unread dot on the Chat bar: counts messages from other people that arrive while the chat is closed. The messages already in the room when you join do not count; your own never do.
+  const chatDot = h("span", { class: "chat-dot", "aria-hidden": "true", hidden: true });
+  chatHead.append(chatDot);
+  let chatSeen = new Set(), chatRoom = null, chatUnread = 0;
+  function chatBadge() {
+    chatDot.hidden = !chatUnread; chatDot.textContent = chatUnread > 9 ? "9+" : String(chatUnread);
+    chatHead.setAttribute("aria-label", chatUnread ? `Chat, ${chatUnread} new message${chatUnread > 1 ? "s" : ""}` : "Chat");
+  }
   function chatUpdate() {
     rc(chatList, ...S.chat.map((m) => h("div", { class: "msg" }, h("b", {}, m.name), m.spec ? h("span", { class: "pill" }, "spectator") : null, ": " + m.text)));
     chatList.scrollTop = chatList.scrollHeight;
+    const isOpen = $("#chat").classList.contains("open");
+    if (chatRoom !== S.code) { chatRoom = S.code; chatSeen = new Set(S.chat.map((m) => m.id)); chatUnread = 0; }   // first batch for this room = history
+    else for (const m of S.chat) {
+      if (chatSeen.has(m.id)) continue;
+      chatSeen.add(m.id);
+      if (!isOpen && m.name !== S.name) chatUnread++;
+    }
+    if (isOpen) chatUnread = 0;
+    chatBadge();
   }
   $("#chatform").addEventListener("submit", async (e) => {
     e.preventDefault(); if (!S.code) return;
     const ok = await N.sendChat(S.code, S.name, chatIn.value, S.role === "spectator").catch((err) => { toast(err.message); return false; });
     if (ok) chatIn.value = ""; else if (chatIn.value.trim()) toast("Slow down: 1 message per second.");
   });
-  $("#chathead").addEventListener("click", () => $("#chat").classList.toggle("open"));
+  chatHead.addEventListener("click", () => { $("#chat").classList.toggle("open"); if ($("#chat").classList.contains("open")) { chatUnread = 0; chatBadge(); chatList.scrollTop = chatList.scrollHeight; } });
 
   const saved = (() => { try { return JSON.parse(sessionStorage.getItem("adw_room")); } catch (e) { return null; } })();
   if (saved && saved.code) {
