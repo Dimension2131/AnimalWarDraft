@@ -67,3 +67,11 @@ html.bgonly body > :not(#pxcv):not(#pxband):not(#themeBtn):not(#eyeBtn):not(#mus
 html.cv body::before { animation: none !important }
 html.cv #pxband { display: none !important }
 body:has(#topbar:not(:empty)) #themeBtn { top: 70px }
+/* The bar that holds the four utility buttons while there is no room top bar (home screen): they are docked into it by js/pxbg.js dock(), so they never sit on top of the page content. */
+#utilbar { position: sticky; top: 0; z-index: 20; box-sizing: border-box; min-height: 52px; padding-top: env(safe-area-inset-top, 0px); background: var(--w-topbar); border-bottom: 2px solid var(--rule) }
+:root[data-world="animals"] #utilbar { border-bottom: 3px double var(--blue-deep) }
+:root[data-world="pokemon"] #utilbar { border-bottom: 3px solid var(--pink) }
+:root[data-world="football"] #utilbar { border-bottom: 3px solid var(--teal) }
+:root[data-world="basketball"] #utilbar { border-bottom: 3px solid var(--yellow) }
+body:has(#topbar:not(:empty)) #utilbar { display: none }
+@media (max-width: 640px) { #utilbar { min-height: 46px } }

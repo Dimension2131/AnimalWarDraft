@@ -590,19 +590,20 @@
   ['home_R', 'home_L', 'away_R', 'away_L', 'ball'].forEach(k => img('basketball_' + k + '.png'));
   // Inside a room the top bar is on screen: dock the eye, light/dark, music and display buttons into it, just left of the Leave button, on phones too (smaller buttons there).
   // The empty .tb-gap spacer in the bar (js/app.js topbar()) gets the width of the docked buttons (--dock-w), so nothing in the bar can run underneath them.
-  const tbar = document.getElementById('topbar'), tbn = document.getElementById('themeBtn');
+  const tbar = document.getElementById('topbar'), ubar = document.getElementById('utilbar'), tbn = document.getElementById('themeBtn');
   function dock() {
-    const lv = tbar && tbar.querySelector('.btn:last-child'), on = lv && tbar.offsetParent !== null && !R.classList.contains('bgonly'), bs = [tbn, eb, document.getElementById('musicBtn'), document.getElementById('fxBtn')].filter(b => b && !b.hidden);
+    const inRoom = !!tbar && tbar.offsetParent !== null, lv = inRoom && tbar.querySelector('.btn:last-child'), host = inRoom ? tbar : ubar;   // in a room: the top bar, left of Leave; elsewhere: the utility bar, at its right edge
+    const on = host && host.offsetParent !== null && (!inRoom || lv) && !R.classList.contains('bgonly'), bs = [tbn, eb, document.getElementById('musicBtn'), document.getElementById('fxBtn')].filter(b => b && !b.hidden);
     if (!on) { bs.forEach(b => ['top', 'right', 'width', 'height'].forEach(k => b.style.removeProperty(k))); if (tbar) tbar.style.removeProperty('--dock-w'); return; }
-    const phone = innerWidth <= 640, gap = phone ? 4 : 8, tr = tbar.getBoundingClientRect(), lr = lv.getBoundingClientRect(), sz = Math.max(28, Math.min(phone ? (innerWidth <= 360 ? 30 : 34) : 44, Math.round(tr.height - 12))), top = Math.round(tr.top + (tr.height - sz) / 2);
-    let right = R.clientWidth - lr.left + gap;
+    const phone = innerWidth <= 640, gap = phone ? 4 : 8, hr = host.getBoundingClientRect(), inset = inRoom ? 0 : parseFloat(getComputedStyle(host).paddingTop) || 0, sz = Math.max(28, Math.min(phone ? (innerWidth <= 360 ? 30 : 34) : 44, Math.round(hr.height - inset - 12))), top = Math.round(hr.top + inset + (hr.height - inset - sz) / 2);
+    let right = lv ? R.clientWidth - lv.getBoundingClientRect().left + gap : 10;
     for (const b of bs) { b.style.setProperty('top', top + 'px'); b.style.setProperty('right', Math.round(right) + 'px'); b.style.setProperty('width', sz + 'px'); b.style.setProperty('height', sz + 'px'); right += sz + gap; }
-    const w = bs.length * (sz + gap) + 'px'; if (tbar.style.getPropertyValue('--dock-w') !== w) tbar.style.setProperty('--dock-w', w);
+    if (tbar) { const w = inRoom ? bs.length * (sz + gap) + 'px' : ''; if (tbar.style.getPropertyValue('--dock-w') !== w) { if (w) tbar.style.setProperty('--dock-w', w); else tbar.style.removeProperty('--dock-w'); } }
   }
   if (tbar) {
     new MutationObserver(dock).observe(tbar, { childList: true, subtree: true });
-    new MutationObserver(dock).observe(R, { attributes: true, attributeFilter: ['class'] });
-    if (window.ResizeObserver) new ResizeObserver(dock).observe(tbar);
+    new MutationObserver(dock).observe(R, { attributes: true, attributeFilter: ['class', 'data-world', 'data-theme'] });
+    if (window.ResizeObserver) { new ResizeObserver(dock).observe(tbar); if (ubar) new ResizeObserver(dock).observe(ubar); }
     addEventListener('resize', dock); if (document.fonts && document.fonts.ready) document.fonts.ready.then(dock); dock();
   }
   size(); start(); report();
