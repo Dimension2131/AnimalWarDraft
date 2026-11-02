@@ -1,5 +1,6 @@
 import * as R from "../../js/rules.js";
 import * as N from "../../js/net.js";
+import { recordGame } from "../../js/gamestats.js";
 import { arr, hash, shuffleSeeded } from "../../js/util.js";
 import { digestOf, fingerprint as fingerprintOf } from "../../js/fingerprint.js";
 import { simulate } from "../../js/sim.js";
@@ -272,15 +273,8 @@ export function createHost(ctx) {
     else champion = st.order.slice(0, 1);
     const ok = await tourTx((c) => (c.state === "finishing" ? { ...c, state: "done", results: { order: st.order, pts: st.pts, surv: st.surv, champion } } : undefined));
     if (!ok) return;
-    const L = S.ledger || {};
-    for (const k of T.keys) {
-      const d = { games_played: 1, fights_won: 0, fights_lost: 0, fights_drawn: 0, tournaments_won: champion.includes(k) ? 1 : 0, animals_drafted: arr((L.rosters || {})[k]).length };
-      for (const f of Object.values(T.fights)) {
-        if (f.replayOf || !f.final || (f.a !== k && f.b !== k)) continue;
-        const me = f.a === k ? "A" : "B"; if (f.final.winner === "draw") d.fights_drawn++; else if (f.final.winner === me) d.fights_won++; else d.fights_lost++;
-      }
-      try { await N.bumpStats(k, nm(k), d); } catch (e) { console.warn("stats", e); }
-    }
+    const pairs = Object.values(T.fights || {}).filter((f) => !f.replayOf && f.final && f.a && f.b).map((f) => ({ w: f.final.winner === "B" ? f.b : f.a, l: f.final.winner === "B" ? f.a : f.b, d: f.final.winner === "draw", margin: 0, score: null }));
+    await recordGame({ S, settings, pack, map, nm, keys: T.keys, order: st.order, champion, pairs });
     await N.put(code, "meta/phase", "results"); log("tournament finished");
   }
 

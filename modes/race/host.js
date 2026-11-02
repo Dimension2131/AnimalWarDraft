@@ -1,4 +1,5 @@
 import * as N from "../../js/net.js";
+import { recordGame } from "../../js/gamestats.js";
 import { arr } from "../../js/util.js";
 import { simulateRace, playbackOf, courseFor, RACE_PRESTART_MS, RACE_END_PAD_MS } from "./race.js";
 
@@ -34,10 +35,7 @@ export function createHost(ctx) {
   async function finish(T) {
     const r = await tourTx((c) => (c.state === "racing" ? { ...c, state: "done" } : undefined));
     if (!committed(r)) return;
-    const win = T.result.order[0], ros = ((S.ledger || {}).rosters) || {};
-    for (const k of arr(T.keys)) {
-      try { await N.bumpStats(k, nm(k), { games_played: 1, tournaments_won: k === win ? 1 : 0, animals_drafted: arr(ros[k]).length }); } catch (e) { console.warn("stats", e); }
-    }
+    await recordGame({ S, settings, pack, map, nm, keys: T.keys, order: T.result.order, champion: [T.result.order[0]], pairs: [] });
     await N.put(code, "game/results", { order: T.result.order, scores: Object.fromEntries(Object.entries(T.result.totals).map(([k, ms]) => [k, Math.round(ms) / 1000])) });
     await N.put(code, "meta/phase", "results");
     log("race finished, winner", win);

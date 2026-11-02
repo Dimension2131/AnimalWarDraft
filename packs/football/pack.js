@@ -1,4 +1,4 @@
-// Football: 253 real players (each at the EA FC / FIFA 15-24 edition where his overall peaked) + 30 hand-estimated legends (icon: true).
+// Football: 253 real players (+ 30 lower-rated ones in football/players_extra.js) (each at the EA FC / FIFA 15-24 edition where his overall peaked) + 30 hand-estimated legends (icon: true).
 // Playable with the Football War Draft mode (modes/football) and the Silhouette Quiz. Data: football/players.js, built by tools/build-football-data.py.
 const POSITIONS = ["goalkeeper", "defender", "midfielder", "forward"];
 const LEAGUES = ["Premier League", "La Liga", "Bundesliga", "Serie A", "Ligue 1", "Other", "Icon"];
@@ -38,7 +38,7 @@ export default {
   title: "Football War Draft",
   tagline: "Bid on players, build a squad, settle it on the pitch.",
   icon: "⚽",
-  blurb: "253 real players and legends. Draft a squad, pick a formation, play a league.",
+  blurb: "282 players and legends. Draft a squad, pick a formation, play a league.",
   nouns: { singular: "player", plural: "players" },
   engine: "football",       // not the animal fight engine: the Football War Draft mode reads this
   noArenas: true,
@@ -64,7 +64,7 @@ export default {
     { id: "excluded", type: "exclude" }
   ],
 
-  entityFiles: ["football/players.js"],
+  entityFiles: ["football/players.js", "football/players_extra.js"],   // players_extra.js: 30 lower-rated players written from memory (estimates)
 
   rosterTag: (p) => p.pos,   // the draft screen's roster list shows each player's position code
 

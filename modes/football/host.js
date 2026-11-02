@@ -2,6 +2,7 @@
 // a knockout bracket (see bracket.js; matches of one round run at the same time), one seeded simulation per match that every device re-runs, plus a choreography layer (choreo.js) that only decorates it.
 import * as R from "../../js/rules.js";
 import * as N from "../../js/net.js";
+import { recordGame } from "../../js/gamestats.js";
 import { arr } from "../../js/util.js";
 import * as E from "./engine.js";
 import * as B from "./bracket.js";
@@ -28,7 +29,7 @@ export function planOf(map, T, f, names, speed) {   // speed overrides the match
 }
 
 export function createHost(ctx) {
-  const { code, S, settings, nm, log, map } = ctx;
+  const { code, S, settings, nm, log, map, pack } = ctx;
   const cache = {};
   const tourTx = (fn) => N.tx(code, "tour", (c) => (c ? fn(c) : undefined));
 
@@ -81,8 +82,9 @@ export function createHost(ctx) {
   async function playStep(T) {
     for (const id of arr(T.current)) {
       const f = T.fights[id]; if (!f || f.final) continue;
-      if (!cache[f.id]) cache[f.id] = planOf(map, T, f, [nm(f.a), nm(f.b)]);
-      const plan = cache[f.id];
+      const ck = f.id + ":" + f.seed;   // fight ids restart at f1 in every tournament ("Play again"), so the key must carry the match's own seed or the old match's plan is reused
+      if (!cache[ck]) cache[ck] = planOf(map, T, f, [nm(f.a), nm(f.b)]);
+      const plan = cache[ck];
       // the match ends at its natural end, or as soon as both managers have skipped to full time (an offline manager does not hold it up). The skip flag lives in the manager's own lineups node: lineups/<key>/skip = "<fight id>:<fight seed>".
       const token = `${f.id}:${f.seed}`, done = (k) => ((S.lineups || {})[k] || {}).skip === token || !((S.players || {})[k] || {}).online || !!((S.players || {})[k] || {}).bot;   // the token holds the match's own random seed: a skip left over from an earlier tournament ("Play again, same team" keeps the lineups) can never match a new match with the same id
       if (N.now() >= f.startAt + endMs(plan.M) || (N.now() >= f.startAt && plan.M.animated && done(f.a) && done(f.b))) return finishFight(f, plan);
@@ -94,12 +96,8 @@ export function createHost(ctx) {
     const order = B.placings(T.bracket || { rounds: [] }, T.res || {}, T.keys), pts = Object.fromEntries(order.map((k, i) => [k, order.length - i])), champion = order.slice(0, 1);
     const ok = await tourTx((c) => (c.state === "finishing" ? { ...c, state: "done", results: { order, pts, champion } } : undefined));
     if (!ok) return;
-    const L = S.ledger || {}, rec = {}; T.keys.forEach((k) => { rec[k] = { w: 0, l: 0, d: 0 }; });
-    for (const r of Object.values(T.res || {})) { if (r.bye || !r.w || !r.l || !rec[r.w] || !rec[r.l]) continue; rec[r.w].w++; rec[r.l].l++; if (r.score && r.score[0] === r.score[1]) { rec[r.w].d++; rec[r.l].d++; } }
-    for (const k of T.keys) {
-      const dd = { games_played: 1, fights_won: rec[k].w, fights_lost: rec[k].l, fights_drawn: 0, tournaments_won: champion.includes(k) ? 1 : 0, animals_drafted: arr((L.rosters || {})[k]).length };
-      try { await N.bumpStats(k, nm(k), dd); } catch (e) { console.warn("stats", e); }
-    }
+    const pairs = Object.values(T.res || {}).filter((r) => !r.bye && r.w && r.l).map((r) => { const d = !!(r.score && r.score[0] === r.score[1] && !r.pens); return { w: r.w, l: r.l, d, margin: r.score ? Math.abs(r.score[0] - r.score[1]) : 0, score: r.score ? [Math.max(...r.score), Math.min(...r.score)] : null }; });
+    await recordGame({ S, settings, pack, map, nm, keys: T.keys, order, champion, pairs });
     await N.patch(code, "", { "game/results": { order, scores: pts, champion }, "meta/phase": "results" }); log("football bracket finished");
   }
 

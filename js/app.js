@@ -13,6 +13,7 @@ import * as FBC from "../modes/football/card.js";
 import * as BBC from "../modes/basketball/card.js";
 import { preload, failed, cardImage } from "./preload.js";
 import { createBotsPanel } from "./bots-ui.js";
+import { createLeaderboard } from "./leaderboard.js";
 
 const $ = (s, r = document) => r.querySelector(s);
 // DOM replaceChildren() turns null/undefined/false into the TEXT "null": every call goes through rc(), which drops them (like h() does).
@@ -306,7 +307,7 @@ async function main() {
       h("div", { class: "row wrap traitrow" }),
       zone(null, null, null));
     return h("div", { class: "acard" },
-      h("div", { class: "plate-head" }, h("div", { class: "medal" }, icon(a, !compact)), h("div", { class: "grow" }, h("strong", { class: "aname" }, a.name), h("div", { class: "special" }, a.special || "")), infoBtn(a, { hideTraits: !!hideTraits })),   // hideTraits = mystery lot: the panel must not show what the card hides
+      h("div", { class: "plate-head" }, h("div", { class: "medal" }, icon(a, !compact)), h("div", { class: "grow" }, h("strong", { class: "aname" }, a.name), h("div", { class: "special" }, a.special || "")), infoBtn(a, { hideTraits: !!hideTraits, bidding: !compact })),   // hideTraits = mystery lot: the panel must not show what the card hides
       h("div", { class: "row meta" }, (PK.cardChips ? PK.cardChips(a) : []).map((x) => h("span", { class: "chip-s" }, x))),
       h("div", { class: "row wrap tagrow" }, arr(a.tags).map((t) => h("span", { class: "pill tag-" + t }, t))),
       h("div", { class: "row wrap traitrow" }, ...traitPills(a, hideTraits)),
@@ -412,18 +413,9 @@ async function main() {
 
   // ================= LEADERBOARD =================
   screens.leaderboard = () => {
-    const body = h("div", {}), res = h("div", {}), look = h("input", { placeholder: "Look up a name" });
-    const row = (s, i) => h("tr", {}, h("td", {}, i == null ? "" : i + 1), h("td", {}, s.name || s.key), h("td", {}, s.tournaments_won || 0), h("td", {}, s.fights_won || 0), h("td", {}, s.fights_lost || 0), h("td", {}, s.fights_drawn || 0), h("td", {}, s.games_played || 0), h("td", {}, s.animals_drafted || 0));
-    const table = (rows, ranked) => h("div", { class: "scroll" }, h("table", { class: "tbl" }, h("thead", {}, h("tr", {}, ["#", "Player", "Titles", "Wins", "Losses", "Draws", "Games", "Picked"].map((x) => h("th", {}, x)))), h("tbody", {}, rows.map((s, i) => row(s, ranked ? i : null)))));
-    screen(h("h1", {}, "Leaderboard"), h("button", { class: "btn small", onclick: () => { S.view = "home"; schedule(); } }, "Back"),
-      h("div", { class: "card" }, h("div", { class: "row" }, look, h("button", {
-        class: "btn", onclick: async () => {
-          try { const s = await N.lookupStats(look.value); rc(res, s ? table([s], false) : h("p", { class: "muted" }, "No stats for that name.")); } catch (e) { toast(e.message); }
-        }
-      }, "Find")), res), body);
-    body.append(h("p", { class: "muted" }, "Loading…"));
-    N.topStats().then((rows) => rc(body, rows.length ? table(rows, true) : h("p", { class: "muted" }, "No games recorded yet."))).catch((e) => rc(body, h("p", { class: "muted" }, "Could not load: " + e.message)));
-    return { update() { } };
+    const lb = createLeaderboard({ h, N, onBack: () => { S.view = "home"; schedule(); } });
+    screen(h("h1", {}, "Leaderboard"), lb.node);
+    return { update() { }, destroy() { lb.destroy(); } };
   };
 
   // ================= LOBBY =================

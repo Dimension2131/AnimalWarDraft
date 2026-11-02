@@ -198,7 +198,9 @@ export function startHost({ code, key, animals, pack, mode, onLog = () => {} }) 
   }
 
   const rosterOf = (k) => arr(((S.ledger || {}).rosters || {})[k]);
-  async function applyOutcome(o) {
+  async function applyOutcome(o, A) {
+    const facts = {};   // leaderboard facts about how the lot was won (only for real wins)
+    if (o.kind === "win" && A && A.id === o.id && A.top) { if (A.top.late) facts.late = true; if (A.nb > 1) facts.bids = A.nb; }
     const text = o.kind === "win" ? `${nm(o.winner)} won ${an(o.animalId)} for $${o.price}`
       : o.kind === "claim" ? `${nm(o.winner)} claimed ${an(o.animalId)} for free`
       : o.kind === "deal" ? `${an(o.animalId)} dealt to broke player ${nm(o.winner)}`
@@ -209,7 +211,7 @@ export function startHost({ code, key, animals, pack, mode, onLog = () => {} }) 
       L.balances = L.balances || {}; L.rosters = L.rosters || {};
       if (o.winner) {
         L.balances[o.winner] = (L.balances[o.winner] || 0) - o.price;
-        L.rosters[o.winner] = arr(L.rosters[o.winner]).concat([{ id: o.animalId, price: o.price }]);
+        L.rosters[o.winner] = arr(L.rosters[o.winner]).concat([{ id: o.animalId, price: o.price, ...facts }]);
         L.stall = 0;
       } else L.stall = (L.stall || 0) + 1;
       L.drawIndex = o.id + 1; L.applied[o.id] = true; L.last = { id: o.id, text, kind: o.kind, animalId: o.animalId, winner: o.winner || null, price: o.price };
@@ -221,7 +223,7 @@ export function startHost({ code, key, animals, pack, mode, onLog = () => {} }) 
   async function draftStep() {
     const L = S.ledger, G = S.game, A = S.auction, s = settings();
     if (!L || !G) return;
-    if (A && A.resolved && A.outcome && !(L.applied && L.applied[A.id])) return applyOutcome(A.outcome);
+    if (A && A.resolved && A.outcome && !(L.applied && L.applied[A.id])) return applyOutcome(A.outcome, A);
     const idx = L.drawIndex || 0;
     if (A && !A.resolved && A.id === idx) {
       const d = decideAuction(A, online(), N.now());

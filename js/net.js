@@ -1,5 +1,6 @@
 import * as R from "./rules.js";
 import { publicRoomState } from "./util.js";
+import { applyRecord } from "./stats.js";
 
 const V = R.FIREBASE_VERSION;
 const [appMod, dbMod] = await Promise.all([
@@ -180,6 +181,8 @@ export function applyBid(a, key, amount, t) {
   if (left <= R.LAST_MOMENT_MS) a.deadline += R.EXTEND_LAST_MS;
   else if (left <= R.EXTEND_WINDOW_MS) a.deadline += R.EXTEND_SMALL_MS;
   a.top = { key, amt: amount };
+  if (left <= R.LAST_MOMENT_MS) a.top.late = true;   // for the leaderboard: a snipe
+  a.nb = (a.nb || 0) + 1;                            // and the number of bids on this lot (a "bidding war")
   return a;
 }
 const t0 = () => now();
@@ -237,6 +240,16 @@ export async function bumpStats(key, name, delta) {
     for (const k of Object.keys(delta)) s[k] = (s[k] || 0) + delta[k];
     return s;
   }, { applyLocally: false });
+}
+// New leaderboard data (js/stats.js): one record per human per finished game, merged into stats/<key> inside a transaction.
+export async function recordGame(key, name, record) {
+  if (String(key).startsWith("bot~")) return;
+  await runTransaction(ref(db, `stats/${key}`), (cur) => applyRecord(cur, name, record), { applyLocally: false });
+}
+export async function allStats() {
+  const s = await get(ref(db, "stats"));
+  const out = []; s.forEach((c) => { const v = c.val(); if (v && v.all) out.push({ key: c.key, ...v }); });
+  return out;
 }
 export async function topStats() {
   const s = await get(query(ref(db, "stats"), orderByChild("tournaments_won"), limitToLast(50)));

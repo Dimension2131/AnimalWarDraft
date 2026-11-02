@@ -121,7 +121,7 @@ export default function createScreens(ctx) {
     const plans = {}, tickRows = {};
     const head = h("div", { class: "qz-head" }), stage = h("div", {}), side = h("div", { class: "card" });
     screen(head, h("div", { class: "card" }, stage), side);
-    const planFor = (T, f) => (plans[f.id] ||= planOf(ctx.entities.map, T, f, [nameOf(f.a), nameOf(f.b)]));
+    const planFor = (T, f) => (plans[f.id + ":" + f.seed] ||= planOf(ctx.entities.map, T, f, [nameOf(f.a), nameOf(f.b)]));
     const xiList = (T, k) => { const ids = arr(T.lineups[k]).slice(0, E.XI).map((id) => ent(id)); return h("div", { class: "fb-xi" }, h("b", {}, `${nameOf(k)} · ${(T.formations || {})[k] || E.DEFAULT_FORMATION}`), ...ids.map((p) => h("span", {}, ctx.withInfo(`${p.pos} ${p.name} (${p.ovr})`, p)))); };
     // under the live film: both squads with an "i" each (the film is a canvas, so there is nothing to tap on it)
     const playersBox = (T, f) => h("details", { class: "fb-players" }, h("summary", {}, "Players"), h("div", { class: "row between" }, xiList(T, f.a), xiList(T, f.b)));
@@ -200,7 +200,7 @@ export default function createScreens(ctx) {
     let sel = "";   // the match whose team stats are shown (default: the final)
     const statCache = {};
     const played = (T) => { const out = []; for (const rd of arr(T.bracket && T.bracket.rounds)) for (const m of arr(rd)) { const r = (T.res || {})[m.id]; if (!r || r.bye || !r.w) continue; const f = Object.values(T.fights || {}).find((x) => x.mid === m.id); if (f) out.push({ m, r, f }); } return out; };
-    const statsFor = (T, f) => (statCache[f.id] = statCache[f.id] || (() => { const names = [nameOf(f.a), nameOf(f.b)], p = planOf(ctx.entities.map, T, f, names, f.speed === "instant" ? "full" : undefined); return { names, st: buildStats({ M: p.M, sim: p.sim }) }; })());   // the film the match was watched with (so the final table equals the live one); an Instant match has no film, so its table uses the Full one
+    const statsFor = (T, f) => (statCache[f.id + ":" + f.seed] = statCache[f.id + ":" + f.seed] || (() => { const names = [nameOf(f.a), nameOf(f.b)], p = planOf(ctx.entities.map, T, f, names, f.speed === "instant" ? "full" : undefined); return { names, st: buildStats({ M: p.M, sim: p.sim }) }; })());   // the film the match was watched with (so the final table equals the live one); an Instant match has no film, so its table uses the Full one
     function statsPanel(T, f) {   // like a match-centre team stats table: each side's players (face + name) next to the numbers, the leading side of every row highlighted
       const d = statsFor(T, f), view = createStatsView({ h, names: d.names, kits: kitsOf(d.names), lineups: [arr(T.lineups[f.a]).slice(0, E.XI), arr(T.lineups[f.b]).slice(0, E.XI)], ent, icon: (p) => ctx.withInfo(ctx.icon(p), p), surname: E.surname });
       view.update(d.st); return h("div", {}, view.el, h("p", { class: "muted small center" }, "Shots, shots on target and cards come from the match simulation; possession, passes, fouls, corners and offsides are counted from the play."));

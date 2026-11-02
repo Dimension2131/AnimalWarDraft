@@ -2,6 +2,7 @@
 // device re-simulates them) and manual battles (the host resolves each turn from the two players' choices; state lives in pkb/<fightId>).
 import * as R from "../../js/rules.js";
 import * as N from "../../js/net.js";
+import { recordGame } from "../../js/gamestats.js";
 import { arr } from "../../js/util.js";
 import { makeTour, advance as tourAdvance, computeStandings } from "../classic/host.js";
 import * as E from "./engine.js";
@@ -19,7 +20,7 @@ export function teamsOfFight(d, map, T, f) {
 export const resultOf = (S) => ({ winner: S.over.w === 0 ? "A" : S.over.w === 1 ? "B" : "draw", survivors: { A: E.survivors(S)[0], B: E.survivors(S)[1] }, turns: S.turn });
 
 export function createHost(ctx) {
-  const { code, S, settings, nm, log, map } = ctx;
+  const { code, S, settings, nm, log, map, pack } = ctx;
   const M = {}; const subs = []; const autoCache = {};
   subs.push(N.watch(code, "pkb", (v) => { M.pkb = v; if (window.__isHost === false) { subs.forEach((u) => u()); subs.length = 0; } }));
   const tourTx = (fn) => N.tx(code, "tour", (c) => (c ? fn(c) : undefined));
@@ -105,12 +106,8 @@ export function createHost(ctx) {
     else champion = stt.order.slice(0, 1);
     const ok = await tourTx((c) => (c.state === "finishing" ? { ...c, state: "done", results: { order: stt.order, pts: stt.pts, surv: stt.surv, champion } } : undefined));
     if (!ok) return;
-    const L = S.ledger || {};
-    for (const k of T.keys) {
-      const dd = { games_played: 1, fights_won: 0, fights_lost: 0, fights_drawn: 0, tournaments_won: champion.includes(k) ? 1 : 0, animals_drafted: arr((L.rosters || {})[k]).length };
-      for (const f of Object.values(T.fights)) { if (!f.final || (f.a !== k && f.b !== k)) continue; const me = f.a === k ? "A" : "B"; if (f.final.winner === "draw") dd.fights_drawn++; else if (f.final.winner === me) dd.fights_won++; else dd.fights_lost++; }
-      try { await N.bumpStats(k, nm(k), dd); } catch (e) { console.warn("stats", e); }
-    }
+    const pairs = Object.values(T.fights || {}).filter((f) => !f.replayOf && f.final && f.a && f.b).map((f) => ({ w: f.final.winner === "B" ? f.b : f.a, l: f.final.winner === "B" ? f.a : f.b, d: f.final.winner === "draw", margin: 0, score: null }));
+    await recordGame({ S, settings, pack, map, nm, keys: T.keys, order: stt.order, champion, pairs });
     await N.patch(code, "", { "game/results": { order: stt.order, scores: stt.pts, champion }, "meta/phase": "results" }); log("pokemon tournament finished");
   }
 
